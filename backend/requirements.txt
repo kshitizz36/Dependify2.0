@@ -6,6 +6,7 @@ gitpython
 websockets
 supabase
 uvicorn
+groq
 # annotated-types==0.7.0
 # anyio==4.8.0
 # certifi==2025.1.31
