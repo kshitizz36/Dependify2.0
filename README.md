@@ -48,3 +48,7 @@ When you upload your GitHub repository to our dashboard, **Dependify**:
 - Direct deployments from our platform.
 
 We’re excited about the future of Dependify and how it can revolutionize developer productivity 🚀.
+## GitAds Sponsored
+[![Sponsored by GitAds](https://gitads.dev/v1/ad-serve?source=kshitizz36/dependify2.0@github)](https://gitads.dev/v1/ad-track?source=kshitizz36/dependify2.0@github)
+
+
