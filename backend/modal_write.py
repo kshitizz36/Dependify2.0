@@ -19,7 +19,14 @@ SUPABASE_URL="https://vpfwosqtxotjkpcgsnas.supabase.co"
 SUPABASE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZwZndvc3F0eG90amtwY2dzbmFzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MjA0MTQ5MCwiZXhwIjoyMDU3NjE3NDkwfQ.eqFTQpKUDKBx4UTnukRjXTpYulANvFQ_t4b56tg4IGg"
 supabase = supabase.create_client(SUPABASE_URL, SUPABASE_KEY)
 
-@app.function(secrets=[modal.Secret.from_name("GROQ_API_KEY"), modal.Secret.from_name("SUPABASE_URL"), modal.Secret.from_name("SUPABASE_KEY")])
+@app.function(
+    gpu="B200"
+    secrets=[
+        modal.Secret.from_name("GROQ_API_KEY"), 
+        modal.Secret.from_name("SUPABASE_URL"), 
+        modal.Secret.from_name("SUPABASE_KEY"),
+        ],
+        )
 def process_file(job):
   from groq import Groq
   from pydantic import BaseModel, ValidationError
