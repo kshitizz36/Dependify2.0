@@ -304,7 +304,7 @@ export default function MainDash({ sidebarOpen, repositories, tasks }: MainDashP
   const handleEnterClick = () => {
     setIsLoading(true);
     console.log(inputValue.split('/')[3]);
-    fetch('http://127.0.0.1:5000/update', {
+    fetch('https://dependify2-0.onrender.com/update'', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
