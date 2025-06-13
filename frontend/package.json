@@ -36,6 +36,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@types/react-syntax-highlighter": "^13.13.4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
