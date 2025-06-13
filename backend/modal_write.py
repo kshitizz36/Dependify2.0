@@ -20,7 +20,6 @@ SUPABASE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZ
 supabase = supabase.create_client(SUPABASE_URL, SUPABASE_KEY)
 
 @app.function(
-    gpu="B200"
     secrets=[
         modal.Secret.from_name("GROQ_API_KEY"), 
         modal.Secret.from_name("SUPABASE_URL"), 
