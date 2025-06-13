@@ -15,7 +15,7 @@ app = modal.App(name="groq-read", image=image)
 
 # Define the Docker image with necessary dependencies
 
-@app.function(gpu="B200",secrets=[modal.Secret.from_name("GROQ_API_KEY"), modal.Secret.from_name("SUPABASE_URL"), modal.Secret.from_name("SUPABASE_KEY")])
+@app.function(secrets=[modal.Secret.from_name("GROQ_API_KEY"), modal.Secret.from_name("SUPABASE_URL"), modal.Secret.from_name("SUPABASE_KEY")])
 def run_script(repo_url: str) -> list[CodeChange]:
     """
     Clones the given repository, runs `init.sh`, and returns combined logs.
