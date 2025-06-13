@@ -125,6 +125,13 @@ async def websocket_endpoint(websocket: WebSocket, client_id: Optional[str] = No
     except WebSocketDisconnect:
         manager.disconnect(client_id)
 
+# if __name__ == '__main__':
+#     import uvicorn
+#     uvicorn.run("server:app", host="127.0.0.1", port=5000, reload=True)
 if __name__ == '__main__':
     import uvicorn
-    uvicorn.run("server:app", host="127.0.0.1", port=5000, reload=True)
+    # Change host from "127.0.0.1" to "0.0.0.0" for cloud deployment
+    # Also use PORT environment variable if available (Render provides this)
+    port = int(os.environ.get("PORT", 5000))
+    uvicorn.run("server:app", host="0.0.0.0", port=port, reload=False)
+
