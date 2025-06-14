@@ -127,4 +127,10 @@ async def websocket_endpoint(websocket: WebSocket, client_id: Optional[str] = No
 
 if __name__ == '__main__':
     import uvicorn
-    uvicorn.run("server:app", host="127.0.0.1", port=5000, reload=True)
+    # Use PORT environment variable if available (Render provides this)
+    # Default to 10000 if not set, as this is common for Render.
+    port = int(os.environ.get("PORT", 10000))
+    # For cloud deployment, host should be "0.0.0.0"
+    # reload=False is generally better for production/staging; True is for local dev
+    print(f"Starting Uvicorn server on host 0.0.0.0 and port {port}")
+    uvicorn.run("server:app", host="0.0.0.0", port=port, reload=False) # Set reload=False for Render
