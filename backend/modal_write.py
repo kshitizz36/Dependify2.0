@@ -39,7 +39,7 @@ def process_file(job):
     refactored_code: str
     refactored_code_comments: str
 
-  client = Groq(api_key="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")
+  client = Groq(api_key="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")
   client = instructor.from_groq(client, mode=instructor.Mode.TOOLS)
 
   file_path = job["path"]
