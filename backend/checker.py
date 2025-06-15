@@ -7,15 +7,15 @@ import json
 import instructor
 import supabase
 
+load_dotenv()
 
-load_dotenv()  # Loads your GROQ_API_KEY from .env file
+# Use environment variable first, fallback to hardcoded if not available
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "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")
+client = instructor.from_groq(Groq(api_key=GROQ_API_KEY), mode=instructor.Mode.JSON)
 
-client = instructor.from_groq(Groq(api_key="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"), mode=instructor.Mode.JSON)
-
-SUPABASE_URL="https://vpfwosqtxotjkpcgsnas.supabase.co"
-SUPABASE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZwZndvc3F0eG90amtwY2dzbmFzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MjA0MTQ5MCwiZXhwIjoyMDU3NjE3NDkwfQ.eqFTQpKUDKBx4UTnukRjXTpYulANvFQ_t4b56tg4IGg"
+SUPABASE_URL = os.getenv("SUPABASE_URL", "https://vpfwosqtxotjkpcgsnas.supabase.co")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZwZndvc3F0eG90amtwY2dzbmFzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MjA0MTQ5MCwiZXhwIjoyMDU3NjE3NDkwfQ.eqFTQpKUDKBx4UTnukRjXTpYulANvFQ_t4b56tg4IGg")
 supabase = supabase.create_client(SUPABASE_URL, SUPABASE_KEY)
-
 
 class CodeChange(BaseModel):
     path: str
@@ -40,9 +40,12 @@ def analyze_file_with_llm(file_path):
     Reads file content and queries the LLM to determine if it's out of date
     and what changes might be necessary. Returns a CodeChange object if applicable.
     """
-    with open(file_path, 'r', encoding="utf-8", errors="ignore") as f:
-        file_content = f.read()
-
+    try:
+        with open(file_path, 'r', encoding="utf-8", errors="ignore") as f:
+            file_content = f.read()
+    except Exception as e:
+        print(f"Error reading file {file_path}: {e}")
+        return None
 
     # Create a user prompt for the LLM
     user_prompt = (
@@ -57,7 +60,6 @@ def analyze_file_with_llm(file_path):
         f"{file_content}"
     )
 
-
     try:
         chat_completion = client.chat.completions.create(
             model="llama-3.1-8b-instant",
@@ -66,8 +68,11 @@ def analyze_file_with_llm(file_path):
                 {"role": "user", "content": user_prompt}
             ],
             response_model=CodeChange,
+            max_retries=3,
+            timeout=30
         )
 
+        print(f"Successfully analyzed: {file_path}")
         print(chat_completion)
 
         data = {
@@ -76,15 +81,14 @@ def analyze_file_with_llm(file_path):
             "code": chat_completion.code_content
         }
 
-        supabase.table("repo-updates").insert(data).execute()
+        try:
+            supabase.table("repo-updates").insert(data).execute()
+        except Exception as db_error:
+            print(f"Database insert error: {db_error}")
         
         return chat_completion
-    except (ValidationError, json.JSONDecodeError) as parse_error:
-        print(f"Error parsing LLM response for {file_path}: {parse_error}")
-        return None
-    except Exception as e:
-        # Handle any other exceptions, e.g. network errors, model issues, etc.
-        print(f"Error analyzing {file_path}: {e}")
+    except Exception as api_error:
+        print(f"API Error analyzing {file_path}: {api_error}")
         return None
     
 def fetch_updates(directory):
@@ -93,6 +97,9 @@ def fetch_updates(directory):
     """
     analysis_results = []
     all_files = get_all_files_recursively(directory)
+    
+    print(f"Found {len(all_files)} files to analyze")
+    
     for filepath in all_files:
         
         if (
@@ -101,63 +108,35 @@ def fetch_updates(directory):
             or ".git/" in filepath
         ):
             continue
-        # Query LLM for this file
-
+        
+        print(f"Analyzing: {filepath}")
         response = analyze_file_with_llm(filepath)
         if response is None or response.add == False:
             continue  # Skip if there was an error
-        print(filepath)
+        
         response.path = filepath
         analysis_results.append(response)
 
     return analysis_results
-    
-
 
 def main():
-    # print(fetch_updates("website-test")[0])
-    print(fetch_updates("website-test"))
-
-    # parser = argparse.ArgumentParser(description="Analyze code files for outdated syntax.")
-    # parser.add_argument("directory", type=str, help="Directory to analyze")
-
-    # args = parser.parse_args()
-    # directory_to_analyze = args.directory
-
-    # # Store results in a list of CodeChange instances
-    # analysis_results = []
-
-    # all_files = get_all_files_recursively(directory_to_analyze)
-    # for filepath in all_files:
-        
-    #     if (
-    #         os.path.basename(filepath).startswith(".") or
-    #         filepath.endswith((".css", ".json", ".md", ".svg", ".ico", ".mjs", ".gitignore", ".env"))
-    #         or ".git/" in filepath
-    #     ):
-    #         continue
-    #     # Query LLM for this file
-
-    #     response = analyze_file_with_llm(filepath)
-    #     if response is None:
-    #         continue  # Skip if there was an error
-    #     response.path = filepath
-    #     analysis_results.append(response)
-
+    print("Testing GROQ API Key...")
+    print(f"Using API Key: {GROQ_API_KEY[:20]}...")
     
-
-    # # Print out any files that are deemed out of date and their suggested changes
-    # if not analysis_results:
-    #     print("No files were found to be out of date.")
-    # else:
-    #     print("=UPDATED=")
-    #     print(analysis_results)
-
-        # for result in analysis_results:
-        #     print(f"File PATH: {result.path}")
-        #     print(f"File CONTENT: {result.code_content}")
-        #     print(f"Reason: {result.reason}")
-        #     print("-" * 40)
+    # Test API connection first
+    try:
+        test_client = Groq(api_key=GROQ_API_KEY)
+        test_response = test_client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{"role": "user", "content": "Hello, just testing the connection."}],
+            max_tokens=10
+        )
+        print("API connection successful!")
+    except Exception as e:
+        print(f"API connection failed: {e}")
+        return
+    
+    print(fetch_updates("website-test"))
 
 if __name__ == "__main__":
     main()
