@@ -1,8 +1,8 @@
-# Dependify
+# Dependify 2.0
 
 **Code Smarter, Not Harder.**
 
-Dependify is an AI-powered developer tool that automates code maintenance, slashes technical debt, and frees up developers to focus on innovation. Stop wrestling with legacy code and let Dependify bring your projects into the future.
+Dependify is an AI-powered developer tool that automates code maintenance, modernizes legacy syntax, and creates detailed pull requests with AI-explained changelogs. Stop wrestling with outdated code patterns and let Dependify bring your projects into the future—automatically.
 
 ## 🔥 The Problem: Drowning in Technical Debt
 
@@ -13,100 +13,286 @@ The numbers don't lie:
 
 Sound familiar? You're not alone.
 
-## 💡 The Dependify Solution: AI-Powered Code Revitalization
+## 💡 The Dependify Solution: AI-Powered Code Modernization
 
-Dependify leverages the power of Generative AI to automate the tedious and time-consuming aspects of code maintenance. By intelligently scanning your codebase, refactoring code, updating dependencies, and generating clear comments, Dependify transforms your maintenance backlog into a streamlined, automated workflow.
+Dependify 2.0 leverages cutting-edge AI to automate the tedious aspects of code maintenance. By intelligently scanning your codebase, refactoring outdated syntax, and generating comprehensive AI-explained changelogs, Dependify transforms your maintenance backlog into a streamlined, automated workflow.
 
 **The result?** Improved code quality, reduced technical debt, and developers who can focus on what they do best: innovate and build great software.
 
-## 🏆 Proven Impact: Real Results
+## ✨ What's New in 2.0
 
-Dependify isn't just a concept—it's a tool that delivers tangible results. We successfully improved code quality by auto-updating all major outdated dependencies in **Microsoft's Magma repository**, leading to a **merged pull request (PR #63)**. This achievement demonstrates Dependify's capability to produce production-ready code improvements for significant open-source projects.
+### 🎨 **GitButler-Style PR Descriptions**
+- AI-generated changelogs with detailed explanations for every file
+- Clear before/after comparisons showing exactly what changed and why
+- Professional, readable PR descriptions that help reviewers understand the impact
 
-## 🚀 How It Works: Your Automated Code Maintenance Workflow
+### 🔄 **Smart Repository Detection**
+- Automatically detects if you own the repository
+- For your repos: Creates PR directly in your repository
+- For others' repos: Creates a fork and submits PR from your fork
+- Works seamlessly with both public and private repositories
 
-When you connect your GitHub repository to our dashboard, Dependify:
+### ⚡ **Production-Ready Deployment**
+- **Frontend**: Deployed on Vercel at [dependify.vercel.app](https://dependify.vercel.app)
+- **Backend**: Hosted on Render with Modal.com serverless containers
+- **Authentication**: GitHub OAuth with 7-day session management
+- **Real-time Updates**: Live progress tracking via Supabase
 
-### 1. **Intelligent Code Scanning**
-- Uses the **Groq Inference API** within a **Modal container** to thoroughly scan your codebase
-- Identifies outdated dependencies, vulnerabilities, and areas needing refactoring
-- *Value: Proactively identifies risks and improvement opportunities*
+## 🚀 How It Works: Your Automated Code Modernization Workflow
 
-### 2. **Smart Prioritization**
-- Generates a targeted list of files requiring attention
-- Focuses on high-impact changes first
-- *Value: Maximizes improvement while minimizing disruption*
+### 1. **Connect Your Repository**
+- Log in with GitHub OAuth
+- Paste any GitHub repository URL (yours or someone else's public repo)
+- Dependify handles the rest automatically
 
-### 3. **AI-Powered Enhancement**
-- Parallel processes each file using **Modal containers** with **Groq's LLM**
-- Intelligently refactors code for clarity, efficiency, and performance
-- Adds clear, AI-generated comments for better maintainability
-- *Value: Dramatically improves code quality with minimal manual effort*
+### 2. **Intelligent Code Analysis**
+- Parallel processing with **Modal containers** and **Groq AI**
+- Scans for outdated syntax patterns across all supported languages
+- Identifies modernization opportunities with high accuracy
 
-### 4. **Seamless Integration**
-- Bundles all improvements into a new GitHub branch
-- Handles staging, committing, and pushing automatically
-- Creates a pull request for your review
-- *Value: Integrates smoothly with your existing development workflow*
+### 3. **AI-Powered Refactoring**
+- Each file is processed independently for maximum speed
+- Modern syntax patterns applied (e.g., `var` → `const/let`, class components → hooks)
+- Code is validated for syntax correctness before proceeding
 
-### 5. **Real-Time Updates**
-- Live notifications through our **Next.js dashboard**
-- All updates managed via **Supabase**
-- *Value: Full visibility into the maintenance process*
+### 4. **Comprehensive Changelog Generation**
+- AI explains **why** each change was made
+- Details the **impact** of modernization
+- Provides **before/after** context for reviewers
 
-## 🛠️ Tech Stack: Built for Scale
+### 5. **Automated PR Creation**
+- Creates a new branch with a unique identifier
+- Commits all changes with detailed descriptions
+- Submits pull request with full AI-generated changelog
+- Handles both owned repositories and forks automatically
 
-We chose cutting-edge technologies to ensure Dependify is robust, fast, and scalable:
+### 6. **Real-Time Progress Tracking**
+- Live updates in the dashboard
+- See exactly which files are being processed
+- Get instant notifications when PR is created
 
-- **[Modal](https://modal.com/):** Serverless containers for parallel file processing and scalable compute power
-- **[Groq](https://groq.com/):** Lightning-fast AI inference for complex code analysis and refactoring
-- **[Next.js](https://nextjs.org/):** Dynamic, responsive user dashboard with live updates
-- **[Supabase](https://supabase.com/):** Real-time notification system and reliable data storage
+## 🛠️ Tech Stack: Built for Production
 
-## 🎯 What We've Accomplished
+We chose cutting-edge technologies to ensure Dependify 2.0 is robust, fast, and scalable:
 
-- ✅ Successfully leveraged Modal for efficient parallel processing
-- ✅ Automated GitHub pull request creation and workflow integration
-- ✅ Designed a scalable, high-throughput pipeline for AI-powered code maintenance
-- ✅ Delivered production-ready improvements to major open-source projects
+### **Backend Infrastructure**
+- **[FastAPI](https://fastapi.tiangolo.com/):** High-performance Python API with async support
+- **[Modal](https://modal.com/):** Serverless containers for parallel file processing at scale
+- **[Groq](https://groq.com/):** Lightning-fast AI inference (llama-3.1-8b-instant, llama-3.3-70b-versatile)
+- **[Render](https://render.com/):** Reliable backend hosting with automatic deployments
 
-## 📚 Key Learnings
+### **Frontend & Real-time**
+- **[Next.js 15](https://nextjs.org/):** Modern React framework with server components
+- **[Supabase](https://supabase.com/):** Real-time PostgreSQL database for live updates
+- **[Vercel](https://vercel.com/):** Edge-optimized frontend deployment
 
-- **Modal Mastery:** Optimized container performance for smooth parallel file processing across complex codebases
-- **GitHub Automation:** Developed best practices for seamless automation of GitHub workflows, from branch creation to PR management
-- **AI Integration:** Fine-tuned LLM interactions for consistent, high-quality code improvements
+### **Authentication & Git**
+- **[GitHub OAuth](https://docs.github.com/en/apps/oauth-apps):** Secure user authentication
+- **[GitPython](https://gitpython.readthedocs.io/):** Automated git operations and PR creation
 
-## 🔮 What's Next: The Future of Autonomous Code Care
+## 🎯 Current Capabilities
 
-Dependify is just getting started! Here's what's on the horizon:
+✅ **Fully Deployed and Working**
+- Live production deployment at [dependify.vercel.app](https://dependify.vercel.app)
+- GitHub OAuth authentication with session management
+- Parallel processing of multiple files using Modal containers
+- AI-powered code modernization with Groq inference
+- Automatic PR creation with detailed changelogs
+- Support for both owned and forked repositories
+- Real-time progress updates via Supabase
+
+✅ **Proven Track Record**
+- Successfully modernized Microsoft's Magma repository (merged PR #63)
+- Processes repositories of any size with parallel file handling
+- Handles JavaScript/TypeScript, Python, and more
+- Production-tested with real-world codebases
+
+## 📊 System Architecture
+
+```
+User → Next.js Dashboard (Vercel)
+         ↓
+    FastAPI Backend (Render)
+         ↓
+    ┌────┴────┐
+    ↓         ↓
+Modal         GitHub API
+Containers    (Fork, Clone, Push, PR)
+    ↓
+Groq AI
+(Code Analysis)
+    ↓
+Supabase
+(Real-time Updates)
+```
+
+## 🔧 Setup & Configuration
+
+### Prerequisites
+- Node.js 18+ and pnpm
+- Python 3.11+
+- GitHub account
+- API keys for Groq, Supabase, and Modal
+
+### Environment Variables
+
+**Frontend (.env.local)**
+```bash
+NEXT_PUBLIC_GITHUB_CLIENT_ID=your_github_oauth_client_id
+NEXT_PUBLIC_API_URL=https://your-backend.onrender.com
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+**Backend (.env)**
+```bash
+# AI & Processing
+GROQ_API_KEY=your_groq_api_key
+
+# Database
+SUPABASE_URL=your_supabase_url
+SUPABASE_KEY=your_supabase_service_key
+
+# GitHub Authentication & API
+GITHUB_CLIENT_ID=your_github_oauth_client_id
+GITHUB_CLIENT_SECRET=your_github_oauth_client_secret
+GITHUB_TOKEN=your_github_classic_personal_access_token  # Requires 'repo' scope
+
+# Security
+API_SECRET_KEY=your_random_secret_key
+
+# Frontend CORS
+FRONTEND_URL=https://your-frontend.vercel.app
+```
+
+**Modal Secrets** (via `modal secret create`)
+```bash
+modal secret create GROQ_API_KEY
+modal secret create SUPABASE_URL
+modal secret create SUPABASE_KEY
+```
+
+### Local Development
+
+1. **Clone the repository**
+```bash
+git clone https://github.com/kshitizz36/Dependify2.0.git
+cd Dependify2.0
+```
+
+2. **Setup Backend**
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+python server.py
+```
+
+3. **Setup Frontend**
+```bash
+cd frontend
+pnpm install
+pnpm dev
+```
+
+4. **Deploy Modal Containers**
+```bash
+cd backend
+modal deploy containers.py  # For analysis
+modal deploy modal_write.py  # For refactoring
+```
+
+## 📚 Key Technical Achievements
+
+### 🚀 **Scalable Architecture**
+- Modal containers handle 100+ files in parallel
+- Serverless design scales automatically with load
+- Efficient resource usage with container warm pools
+
+### 🔐 **Secure Authentication**
+- GitHub OAuth integration with token refresh
+- 7-day session management with timestamp validation
+- Secure API key handling via Modal secrets
+
+### 🤖 **Advanced AI Integration**
+- Lazy initialization pattern for Modal secrets
+- Robust error handling and validation
+- Structured output with Pydantic models
+
+### 🔄 **Git Automation**
+- Smart fork detection (own repo vs others)
+- Authenticated clone URLs for push operations
+- Automatic branch creation and PR submission
+
+## 🔮 Roadmap: The Future of Autonomous Code Maintenance
+
+### 🎯 **Near-Term Enhancements**
+- [ ] **Multi-language Support:** Expand beyond JavaScript/TypeScript to Python, Go, Rust, and more
+- [ ] **Custom Rules:** Allow users to define their own refactoring patterns
+- [ ] **Batch Processing:** Process multiple repositories in one session
+- [ ] **PR Templates:** Customizable changelog formats per organization
 
 ### 🧪 **Advanced Testing**
-- **AI-Powered Unit Test Generation:** Automatically generate comprehensive unit tests for refactored code
-- **Test Coverage Analysis:** Identify and fill gaps in your test suite
-
-### 🚢 **Deployment Pipeline**
-- **Direct Deployments:** End-to-end automation from code enhancement to production
-- **Continuous Integration:** Seamless integration with your CI/CD pipeline
+- [ ] **AI-Powered Unit Test Generation:** Automatically generate comprehensive unit tests for refactored code
+- [ ] **Test Coverage Analysis:** Identify and fill gaps in your test suite
+- [ ] **Regression Detection:** Verify refactored code maintains original behavior
 
 ### 🛡️ **Security & Reliability**
-- **Proactive Security Audits:** AI-powered vulnerability detection and intelligent patching
-- **Automated Security Updates:** Keep your dependencies secure without manual intervention
+- [ ] **Proactive Security Audits:** AI-powered vulnerability detection and intelligent patching
+- [ ] **Automated Security Updates:** Keep your dependencies secure without manual intervention
+- [ ] **Breaking Change Detection:** Warn about potential breaking changes before merging
 
 ### 📝 **Documentation & Standards**
-- **Intelligent Documentation Generation:** Auto-generate comprehensive docstrings and comments
-- **Custom Style Enforcement:** Tailor AI refactoring to your team's coding standards and style guides
+- [ ] **Intelligent Documentation Generation:** Auto-generate comprehensive docstrings and comments
+- [ ] **Custom Style Enforcement:** Tailor AI refactoring to your team's coding standards and style guides
+- [ ] **Migration Guides:** Generate step-by-step guides for major refactorings
 
-## 🎯 Get Started with Dependify
+## 🎯 Get Started with Dependify 2.0
 
-Ready to reclaim your time and supercharge your codebase? While our full dashboard experience is under active development, you can follow our progress right here on GitHub!
+Ready to reclaim your time and supercharge your codebase?
 
-**Show Your Support:**
-- ⭐ **Star this repo** to stay updated
-- 👀 **Watch for releases** and new features
-We're building Dependify to revolutionize your development workflow, and we're excited to share it with you soon!
+### 🚀 **Try It Now**
+1. Visit **[dependify.vercel.app](https://dependify.vercel.app)**
+2. Click "Continue with GitHub" to authenticate
+3. Paste any GitHub repository URL
+4. Watch as Dependify modernizes your code automatically!
+
+### 📖 **Learn More**
+- Read the [Setup Guide](./backend/SETUP.md) for local development
+- Check out [Testing Results](./TESTING_RESULTS.md) for real-world examples
+- See [Deployment Status](./DEPLOYMENT_STATUS.md) for infrastructure details
+
+### 🤝 **Contributing**
+We welcome contributions! Whether it's:
+- 🐛 Bug reports and fixes
+- ✨ Feature requests and implementations
+- 📚 Documentation improvements
+- 🎨 UI/UX enhancements
+
+Feel free to open issues or submit pull requests.
+
+### ⭐ **Show Your Support**
+If Dependify helps improve your workflow:
+- ⭐ Star this repository
+- 🐦 Share it with your team
+- 💬 Provide feedback through GitHub issues
 
 ---
-*Dependify: Where AI meets code maintenance. Code smarter, not harder.*
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- Built with ❤️ by [@kshitizz36](https://github.com/kshitizz36)
+- Powered by [Modal](https://modal.com/), [Groq](https://groq.com/), [Supabase](https://supabase.com/), and [Vercel](https://vercel.com/)
+- Inspired by the developer community's need for better code maintenance tools
+
+---
+
+*Dependify 2.0: Where AI meets code modernization. Code smarter, not harder.*
 
 ## GitAds Sponsored
 [![Sponsored by GitAds](https://gitads.dev/v1/ad-serve?source=kshitizz36/dependify2.0@github)](https://gitads.dev/v1/ad-track?source=kshitizz36/dependify2.0@github)
