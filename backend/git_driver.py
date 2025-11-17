@@ -1,115 +1,335 @@
 from git import Repo
 import uuid
 import requests
-from os import getenv
-from dotenv import load_dotenv
 import os
 import supabase
+from config import Config
 
-load_dotenv()
-
-supabase = supabase.create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
+# Initialize Supabase client
+supabase_client = supabase.create_client(Config.SUPABASE_URL, Config.SUPABASE_KEY)
 
 def create_fork(repo_owner, repo_name):
-    """Create a fork of the repository under the authenticated user's account"""
-    GITHUB_TOKEN = getenv("GITHUB_TOKEN")
+    """
+    Create a TEMPORARY STAGING fork of the repository for PR creation purposes.
+    
+    This fork is created solely to propose changes via pull request.
+    Users can safely delete the fork after the PR is merged/closed.
+    
+    If the user already owns the repo, returns the original repo info (no fork needed).
+    If fork already exists, returns the existing fork information.
+
+    Args:
+        repo_owner: Original repository owner
+        repo_name: Repository name
+
+    Returns:
+        Dictionary with repository information (original or fork) and a flag indicating if it's the user's own repo
+    """
+    if not Config.GITHUB_TOKEN:
+        raise ValueError("GITHUB_TOKEN not configured")
+
     headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
+        "Authorization": f"token {Config.GITHUB_TOKEN}",
         "Accept": "application/vnd.github.v3+json"
     }
+    
+    # Get authenticated user's username
+    try:
+        user_response = requests.get("https://api.github.com/user", headers=headers, timeout=30)
+        if user_response.status_code == 200:
+            username = user_response.json()["login"]
+            
+            # Check if user owns the repository
+            if username.lower() == repo_owner.lower():
+                print(f"User owns the repository - no fork needed")
+                # Get original repo info
+                repo_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}"
+                repo_response = requests.get(repo_url, headers=headers, timeout=30)
+                if repo_response.status_code == 200:
+                    repo_data = repo_response.json()
+                    repo_data['is_own_repo'] = True  # Flag to indicate it's user's own repo
+                    return repo_data
+            
+            # Check if fork already exists
+            fork_check_url = f"https://api.github.com/repos/{username}/{repo_name}"
+            fork_response = requests.get(fork_check_url, headers=headers, timeout=30)
+            
+            if fork_response.status_code == 200:
+                fork_data = fork_response.json()
+                if fork_data.get("fork"):
+                    print(f"Fork already exists: {fork_data['clone_url']}")
+                    fork_data['is_own_repo'] = False
+                    return fork_data
+    except requests.RequestException as e:
+        print(f"Error checking user/fork: {e}")
+    
+    # Create new fork
     url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/forks"
-    response = requests.post(url, headers=headers)
-    if response.status_code == 202:  # GitHub returns 202 for fork creation
-        return response.json()
-    return None
+
+    try:
+        response = requests.post(url, headers=headers, timeout=30)
+        if response.status_code == 202:  # GitHub returns 202 for fork creation
+            print("New fork created successfully")
+            fork_data = response.json()
+            fork_data['is_own_repo'] = False
+            return fork_data
+        elif response.status_code == 200:  # Fork already exists
+            print("Fork already exists (200 response)")
+            fork_data = response.json()
+            fork_data['is_own_repo'] = False
+            return fork_data
+        else:
+            print(f"Failed to create fork: {response.status_code} - {response.text}")
+            return None
+    except requests.RequestException as e:
+        print(f"Error creating fork: {e}")
+        return None
 
 def load_repository(repo_path="./staging"):
-    repo = Repo(repo_path)
-    origin = repo.remotes.origin
-    data = {
-        "status": "LOADING",
-        "message": "Loading repository..."
-    }
-    supabase.table("repo-updates").insert(data).execute()
-    origin_url = origin.url
-    return repo, origin, origin_url
+    """
+    Load a Git repository from the specified path.
+
+    Args:
+        repo_path: Path to the repository directory
+
+    Returns:
+        Tuple of (repo, origin, origin_url)
+    """
+    try:
+        repo = Repo(repo_path)
+        origin = repo.remotes.origin
+
+        data = {
+            "status": "LOADING",
+            "message": "Loading repository..."
+        }
+        supabase_client.table("repo-updates").insert(data).execute()
+
+        origin_url = origin.url
+        return repo, origin, origin_url
+    except Exception as e:
+        print(f"Error loading repository: {e}")
+        raise
 
 def create_and_push_branch(repo, origin, files_to_stage):
-    new_branch_name = uuid.uuid4().hex
+    """
+    Create a new branch, stage files, commit, and push to remote.
+
+    Args:
+        repo: Git repository object
+        origin: Remote origin
+        files_to_stage: List of file paths to stage
+
+    Returns:
+        Tuple of (branch_name, username)
+    """
+    if not Config.GITHUB_TOKEN:
+        raise ValueError("GITHUB_TOKEN not configured")
+
+    # Create unique branch name
+    new_branch_name = f"dependify-{uuid.uuid4().hex[:8]}"
     new_branch = repo.create_head(new_branch_name)
     new_branch.checkout()
 
-    print("Created and switched to branch:", new_branch_name)
+    print(f"Created and switched to branch: {new_branch_name}")
 
+    # Stage files
     repo.index.add(files_to_stage)
-    print("Staged files:", files_to_stage)
+    print(f"Staged {len(files_to_stage)} files")
 
-    repo.index.commit("Automated commit message.")
+    # Create commit
+    commit_message = """🤖 Automated code modernization by Dependify
 
+This commit contains automated refactoring to update outdated syntax
+and improve code quality using AI-powered analysis.
+
+Generated with Dependify 2.0
+"""
+    repo.index.commit(commit_message)
+
+    # Update Supabase
     data = {
         "status": "LOADING",
-        "message": "Creating branches..."
+        "message": "Pushing changes to GitHub..."
     }
-    supabase.table("repo-updates").insert(data).execute()
+    supabase_client.table("repo-updates").insert(data).execute()
 
-    # Get the authenticated user's username
-    GITHUB_TOKEN = getenv("GITHUB_TOKEN")
+    # Get authenticated user's username
     headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
+        "Authorization": f"token {Config.GITHUB_TOKEN}",
         "Accept": "application/vnd.github.v3+json"
     }
-    user_response = requests.get("https://api.github.com/user", headers=headers)
-    if user_response.status_code == 200:
-        username = user_response.json()["login"]
-    else:
-        raise Exception("Could not get authenticated user information")
 
-    origin.push(new_branch)
-    print("Pushed branch to remote.")
+    try:
+        user_response = requests.get("https://api.github.com/user", headers=headers, timeout=30)
+        if user_response.status_code == 200:
+            username = user_response.json()["login"]
+        else:
+            raise Exception(f"Could not get authenticated user: {user_response.text}")
+    except requests.RequestException as e:
+        raise Exception(f"GitHub API error: {e}")
+
+    # Push to remote
+    try:
+        origin.push(new_branch)
+        print(f"Pushed branch {new_branch_name} to remote")
+    except Exception as e:
+        print(f"Error pushing to remote: {e}")
+        raise
 
     return new_branch_name, username
 
-def create_pull_request(new_branch_name, repo_owner, repo_name, base_branch, head_owner):
+def create_pull_request(new_branch_name, repo_owner, repo_name, base_branch, head_owner, is_own_repo=False, changelog_markdown=None):
     """
-    Create a pull request from fork to original repository
-    @param new_branch_name: Name of the branch with changes
-    @param repo_owner: Original repository owner
-    @param repo_name: Repository name
-    @param base_branch: Target branch in original repository
-    @param head_owner: Owner of the fork (usually the authenticated user)
-    """
-    GITHUB_TOKEN = getenv("GITHUB_TOKEN")
-    if not GITHUB_TOKEN:
-        raise Exception("GITHUB_TOKEN environment variable not set.")
+    Create a pull request from fork to original repository, or within the same repo if user owns it.
 
-    pr_title = f"Automated PR for branch {new_branch_name}"
-    pr_body = "This pull request was automatically created."
+    Args:
+        new_branch_name: Name of the branch with changes
+        repo_owner: Original repository owner
+        repo_name: Repository name
+        base_branch: Target branch in original repository
+        head_owner: Owner of the fork (usually the authenticated user)
+        is_own_repo: Whether the user owns the repository (no fork needed)
+        changelog_markdown: Optional detailed changelog markdown to include in PR
+
+    Returns:
+        Pull request URL or None if failed
+    """
+    if not Config.GITHUB_TOKEN:
+        raise ValueError("GITHUB_TOKEN not configured")
+
+    pr_title = f"🤖 Automated code modernization by Dependify"
     
+    # Use provided changelog or default PR body
+    if changelog_markdown:
+        pr_body = changelog_markdown
+    elif is_own_repo:
+        pr_body = f"""## Automated Code Modernization
+
+This pull request was automatically generated by [Dependify](https://github.com/kshitizz36/Dependify2.0) to modernize outdated syntax and improve code quality.
+
+### Changes Made
+- Updated outdated syntax to modern standards
+- Improved code readability and maintainability
+- Applied best practices and conventions
+
+### Review Guidelines
+- Please review all changes carefully before merging
+- Run your test suite to ensure compatibility
+- Check for any breaking changes in updated APIs
+
+### Branch
+`{new_branch_name}`
+
+---
+Generated with ❤️ by [Dependify 2.0](https://github.com/kshitizz36/Dependify2.0)
+"""
+    else:
+        pr_body = f"""## Automated Code Modernization
+
+This pull request was automatically generated by [Dependify](https://github.com/kshitizz36/Dependify2.0) to modernize outdated syntax and improve code quality.
+
+### Changes Made
+- Updated outdated syntax to modern standards
+- Improved code readability and maintainability
+- Applied best practices and conventions
+
+### Review Guidelines
+- Please review all changes carefully before merging
+- Run your test suite to ensure compatibility
+- Check for any breaking changes in updated APIs
+
+### About This PR
+- This PR was created from a **temporary staging fork** (`{head_owner}/{repo_name}`)
+- The fork was created solely to propose these changes
+- You can safely delete the fork after reviewing/merging this PR
+- All changes are transparent and can be reviewed in the "Files changed" tab
+
+### Branch
+`{new_branch_name}` (from fork: `{head_owner}/{repo_name}`)
+
+---
+Generated with ❤️ by [Dependify 2.0](https://github.com/kshitizz36/Dependify2.0)
+
+*Note: This is an automated tool for code modernization. The temporary fork used to create this PR can be deleted after the PR is merged or closed.*
+"""
+
     headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
+        "Authorization": f"token {Config.GITHUB_TOKEN}",
         "Accept": "application/vnd.github.v3+json"
     }
-    
-    # The head should be in format "username:branch_name"
-    head = f"{head_owner}:{new_branch_name}"
-    
+
+    # If it's user's own repo, head is just the branch name
+    # If it's a fork, head is "username:branch_name"
+    if is_own_repo:
+        head = new_branch_name
+        print(f"Creating PR in user's own repository: {repo_owner}/{repo_name}")
+    else:
+        head = f"{head_owner}:{new_branch_name}"
+        print(f"Creating PR from fork {head_owner}/{repo_name} to {repo_owner}/{repo_name}")
+
     data = {
         "title": pr_title,
-        "head": head,  # Format: username:branch_name
+        "head": head,
         "base": base_branch,
         "body": pr_body
     }
-    
-    url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls"
-    response = requests.post(url, json=data, headers=headers)
 
-    if response.status_code == 201:
-        pr_url = response.json().get("html_url")
-        print("Pull request created:", pr_url)
-        return pr_url
-    else:
-        print("Failed to create pull request:", response.json())
+    url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls"
+
+    try:
+        response = requests.post(url, json=data, headers=headers, timeout=30)
+
+        if response.status_code == 201:
+            pr_url = response.json().get("html_url")
+            print(f"✅ Pull request created: {pr_url}")
+            return pr_url
+        else:
+            error_msg = response.json().get("message", "Unknown error")
+            print(f"❌ Failed to create pull request: {response.status_code} - {error_msg}")
+            return None
+    except requests.RequestException as e:
+        print(f"❌ Error creating pull request: {e}")
         return None
+
+
+def delete_fork(repo_owner, repo_name):
+    """
+    Delete a forked repository (OPTIONAL - for cleanup after PR is merged).
+    
+    This is useful for cleaning up temporary staging forks created by Dependify.
+    Users can also manually delete forks from GitHub UI.
+    
+    Args:
+        repo_owner: Fork owner (usually the authenticated user)
+        repo_name: Repository name
+        
+    Returns:
+        True if deleted successfully, False otherwise
+    """
+    if not Config.GITHUB_TOKEN:
+        raise ValueError("GITHUB_TOKEN not configured")
+    
+    headers = {
+        "Authorization": f"token {Config.GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+    
+    url = f"https://api.github.com/repos/{repo_owner}/{repo_name}"
+    
+    try:
+        response = requests.delete(url, headers=headers, timeout=30)
+        
+        if response.status_code == 204:  # GitHub returns 204 for successful deletion
+            print(f"✅ Fork deleted: {repo_owner}/{repo_name}")
+            return True
+        else:
+            print(f"Failed to delete fork: {response.status_code} - {response.text}")
+            return False
+    except requests.RequestException as e:
+        print(f"Error deleting fork: {e}")
+        return False
+
 
 # Example usage:
 def process_repository(repo_owner, repo_name, files_to_update):
@@ -124,6 +344,13 @@ def process_repository(repo_owner, repo_name, files_to_update):
         
         fork_url = fork_result["clone_url"]  # Use the clone URL from the fork
         
+        # Add GitHub token to URL for authentication
+        if fork_url.startswith("https://github.com/"):
+            # Insert token into URL: https://token@github.com/user/repo.git
+            authenticated_url = fork_url.replace("https://github.com/", f"https://{Config.GITHUB_TOKEN}@github.com/")
+        else:
+            authenticated_url = fork_url
+        
         # 2. Clone the forked repository
         staging_dir = "./staging"
         if os.path.exists(staging_dir):
@@ -132,8 +359,8 @@ def process_repository(repo_owner, repo_name, files_to_update):
         
         os.makedirs(staging_dir)
         
-        # Clone the fork instead of original repository
-        repo = Repo.clone_from(fork_url, staging_dir)
+        # Clone the fork with authenticated URL
+        repo = Repo.clone_from(authenticated_url, staging_dir)
         origin = repo.remotes.origin
         
         # 3. Create and push branch with changes
