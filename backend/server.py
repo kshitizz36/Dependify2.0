@@ -279,14 +279,20 @@ async def update(request: Request, payload: UpdateRequest,
         repo_url = fork_result.get("clone_url")
         repo_owner_username = fork_result.get("owner", {}).get("login")
         
+        # Add GitHub token to URL for authentication
+        if repo_url and repo_url.startswith("https://github.com/"):
+            authenticated_url = repo_url.replace("https://github.com/", f"https://{Config.GITHUB_TOKEN}@github.com/")
+        else:
+            authenticated_url = repo_url
+        
         if is_own_repo:
             print(f"User owns the repository - working directly on: {repo_url}")
         else:
             print(f"Fork created/found: {repo_url}")
 
-        # Clone the repository (fork or original)
+        # Clone the repository (fork or original) with authentication
         print("Step 4: Cloning repository...")
-        clone_cmd = ["git", "clone", repo_url, staging_dir]
+        clone_cmd = ["git", "clone", authenticated_url, staging_dir]
         result = subprocess.run(clone_cmd, capture_output=True, text=True)
 
         if result.returncode != 0:
