@@ -1,137 +1,468 @@
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
-from typing import Optional
+# server.py
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Depends, Query, Request
+from typing import Optional, Dict
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-import docker
+from pydantic import BaseModel, Field, validator
 from docker.errors import DockerException, ContainerError
 import os
 import subprocess
 import asyncio
-import websockets
 import json
+import shutil
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
-# Hardcoded credentials (development only)
-SUPABASE_URL="https://vpfwosqtxotjkpcgsnas.supabase.co"
-SUPABASE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZwZndvc3F0eG90amtwY2dzbmFzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MjA0MTQ5MCwiZXhwIjoyMDU3NjE3NDkwfQ.eqFTQpKUDKBx4UTnukRjXTpYulANvFQ_t4b56tg4IGg"
-GROQ_API_KEY = "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"
+# Import configuration and authentication
+from config import Config
+from auth import AuthService, get_current_user, get_optional_user
+from changelog_formatter import ChangelogFormatter, FileChange
 
-# If other modules rely on environment variables, update them accordingly.
-# For example, in your containers module, you might replace:
-#   client = instructor.from_groq(Groq(api_key=os.getenv("GROQ_API_KEY")), mode=instructor.Mode.JSON)
-# with:
-#   client = instructor.from_groq(Groq(api_key=GROQ_API_KEY), mode=instructor.Mode.JSON)
-
-# Import updated app objects from your modules
-# Adjust these imports to match the names and locations of your modules.
+# Import updated app objects from modules
 from containers import app as container_app, run_script
 from modal_write import app as write_app, process_file
-from git_driver import load_repository, create_and_push_branch, create_pull_request
+from git_driver import load_repository, create_and_push_branch, create_pull_request, create_fork
 from socket_manager import ConnectionManager
 
-app = FastAPI()
+# Initialize FastAPI app with metadata
+app = FastAPI(
+    title="Dependify API",
+    description="AI-powered code modernization and technical debt reduction",
+    version="2.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc"
+)
+
+# Initialize rate limiter
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Initialize WebSocket manager
 manager = ConnectionManager()
 
-# Add CORS middleware
+# Add CORS middleware with restricted origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=Config.get_allowed_origins(),
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
-# Define request model
+# Define request models
 class UpdateRequest(BaseModel):
-    repository: str
-    repository_owner: str
-    repository_name: str
+    repository: str = Field(..., description="GitHub repository URL")
+    repository_owner: str = Field(..., description="Repository owner username")
+    repository_name: str = Field(..., description="Repository name")
 
-@app.post('/update')
-async def update(request: UpdateRequest):
+    @validator('repository')
+    def validate_repository_url(cls, v):
+        """Validate that repository URL is a valid GitHub URL."""
+        if not v.startswith(('https://github.com/', 'git@github.com:')):
+            raise ValueError('Repository must be a valid GitHub URL')
+        return v
+
+
+class GitHubOAuthRequest(BaseModel):
+    code: str = Field(..., description="GitHub OAuth authorization code")
+
+
+class AuthResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: Dict
+
+
+# Root endpoint
+@app.get("/", tags=["System"])
+async def root():
+    """Root endpoint returning API information."""
+    return {
+        "name": "Dependify API",
+        "version": "2.0.0",
+        "status": "running",
+        "docs": "/docs",
+        "health": "/health"
+    }
+
+
+# Health check endpoint
+@app.get("/health", tags=["System"])
+async def health_check():
+    """Health check endpoint to verify server is running."""
+    return {
+        "status": "healthy",
+        "version": "2.0.0",
+        "message": "Dependify API is running"
+    }
+
+
+# GitHub OAuth endpoints
+@app.post("/auth/github", response_model=AuthResponse, tags=["Authentication"])
+@limiter.limit("10/minute")
+async def github_oauth(request: Request, oauth_request: GitHubOAuthRequest):
+    """
+    Exchange GitHub OAuth code for access token.
+
+    This endpoint is called after user authorizes your app on GitHub.
+    request must be a starlette.requests.Request instance for slowapi.
+    """
     try:
-        # Run container-based script execution
-        with container_app.run():
-            job_list = run_script.remote(request.repository)
+        github_data = await AuthService.exchange_github_code(oauth_request.code)
 
-        async def update_ws():
-            uri = "wss://localhost:5000/ws?client_id=1"
-            print("updating ws")
-            async with websockets.connect(uri) as websocket:
-                # Now `websocket` is connected
-                await websocket.send(json.dumps(job_list))
-                response = await websocket.recv()
-                print(response)
+        # Create JWT token for our API
+        user_data = github_data["user"]
+        access_token = AuthService.create_access_token(
+            data={
+                "user_id": user_data["id"],
+                "username": user_data["login"],
+                "github_token": github_data["github_token"]
+            }
+        )
 
-        # Run the websocket update in a background task
-        asyncio.create_task(update_ws())
- 
-        with write_app.run():
-            refactored_jobs = []
-            for job in job_list:
-                output = process_file.remote(job)  # spin up a container for every file and wait for result
-                refactored_jobs.append({
-                    "path": f"{os.getcwd()}/staging{output['file_path'][24:]}",
-                    "new_content": output["refactored_code"],
-                    "comments": output["refactored_code_comments"]
-                })
-      
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user": user_data
+        }
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Authentication failed: {str(e)}")
+
+
+@app.get("/auth/me", tags=["Authentication"])
+async def get_current_user_info(current_user: Dict = Depends(get_current_user)):
+    """Get current authenticated user information."""
+    return {"user": current_user}
+
+
+@app.post('/update', tags=["Repository"])
+@limiter.limit(f"{Config.RATE_LIMIT_PER_HOUR}/hour")
+async def update(request: Request, payload: UpdateRequest,
+                 current_user: Optional[Dict] = Depends(get_optional_user)):
+    """
+    Process a repository to modernize code and create a pull request.
+
+    This endpoint:
+    1. Analyzes repository files for outdated syntax
+    2. Uses LLM to refactor code
+    3. Creates a new branch with changes
+    4. Submits a pull request
+
+    Requires authentication for private repositories.
+    """
+    staging_dir = None
+
+    try:
+        print(f"Processing repository: {payload.repository}")
+
         # Create staging area
         staging_dir = os.path.join(os.getcwd(), "staging")
-        if not os.path.exists(staging_dir):
-            os.makedirs(staging_dir)
 
-        # Clone repository and wait for completion
-        clone_cmd = ["git", "clone", request.repository, staging_dir]
-        result = subprocess.call(clone_cmd)
+        # Clean up existing staging directory
+        if os.path.exists(staging_dir):
+            shutil.rmtree(staging_dir)
+        os.makedirs(staging_dir)
 
-        # Load repository info once clone is complete
+        # Run container-based script execution to analyze files
+        print("Step 1: Analyzing repository files...")
+        try:
+            with container_app.run():
+                job_list = run_script.remote(payload.repository)
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to analyze repository: {str(e)}"
+            )
+
+        if not job_list or not isinstance(job_list, list):
+            return {
+                "status": "success",
+                "message": "No outdated files found in repository",
+                "repository": payload.repository,
+                "files_analyzed": 0,
+                "files_updated": 0
+            }
+
+        print(f"Found {len(job_list)} files to update")
+
+        # Process files with LLM refactoring IN PARALLEL (async)
+        print("Step 2: Refactoring files with AI (parallel processing)...")
+        with write_app.run():
+            # Use Modal's .map.aio() for async parallel processing
+            print(f"Starting parallel processing of {len(job_list)} files...")
+            
+            refactored_jobs = []
+            file_changes = []  # For changelog generation
+            validation_results = []
+            i = 0
+            async for output in process_file.map.aio(job_list):
+                i += 1
+                if output and output.get("refactored_code"):
+                    # make path safe - only attempt to map if output has file_path
+                    file_path = output.get("file_path", "")
+                    # preserve original behavior but guard slicing
+                    new_path = (
+                        f"{staging_dir}{file_path[24:]}" if file_path and len(file_path) > 24 else os.path.join(staging_dir, os.path.basename(file_path))
+                    )
+                    
+                    # Collect changelog data
+                    if output.get("changelog") and output.get("confidence_score") is not None:
+                        file_change = FileChange(
+                            file_path=file_path,
+                            old_code=output.get("original_code", ""),
+                            new_code=output.get("refactored_code", ""),
+                            explanation=output.get("refactored_code_comments", ""),
+                            confidence_score=output.get("confidence_score", 0),
+                            language=output.get("validation", {}).get("language", "unknown"),
+                            lines_added=output.get("changelog", {}).get("lines_added", 0),
+                            lines_removed=output.get("changelog", {}).get("lines_removed", 0),
+                            key_changes=output.get("changelog", {}).get("key_changes", [])
+                        )
+                        file_changes.append(file_change)
+                    
+                    # Collect validation results
+                    if output.get("validation"):
+                        validation_results.append({
+                            "file": file_path,
+                            "is_valid": output["validation"].get("is_valid", True),
+                            "confidence": output.get("confidence_score", 0)
+                        })
+                    
+                    refactored_jobs.append({
+                        "path": new_path,
+                        "new_content": output["refactored_code"],
+                        "comments": output.get("refactored_code_comments", ""),
+                        "confidence_score": output.get("confidence_score", 0),
+                        "validation": output.get("validation", {}),
+                        "changelog": output.get("changelog", {})
+                    })
+                    
+                    # Enhanced logging with confidence emoji
+                    conf_emoji = "🟢" if output.get("confidence_score", 0) >= 80 else "🟡" if output.get("confidence_score", 0) >= 60 else "🔴"
+                    print(f"✅ Completed {i}/{len(job_list)}: {file_path} {conf_emoji}")
+                else:
+                    print(f"⚠️ Skipped {i}/{len(job_list)}: No output")
+
+        # Validate refactored jobs
+        if not refactored_jobs or not isinstance(refactored_jobs, list):
+            raise HTTPException(
+                status_code=400,
+                detail="Failed to refactor any files. Please check if the repository contains valid code files."
+            )
+        
+        # Filter out invalid entries
+        refactored_jobs = [
+            job for job in refactored_jobs 
+            if job and isinstance(job, dict) and job.get("new_content")
+        ]
+        
+        if not refactored_jobs:
+            raise HTTPException(
+                status_code=400,
+                detail="No valid refactored files generated. Please check repository content."
+            )
+
+        # Create fork of the repository (or get original if user owns it)
+        print("Step 3: Checking repository ownership and creating fork if needed...")
+        fork_result = create_fork(payload.repository_owner, payload.repository_name)
+        
+        if not fork_result:
+            raise HTTPException(
+                status_code=400,
+                detail="Failed to access repository. Make sure GITHUB_TOKEN is configured correctly."
+            )
+        
+        is_own_repo = fork_result.get("is_own_repo", False)
+        repo_url = fork_result.get("clone_url")
+        repo_owner_username = fork_result.get("owner", {}).get("login")
+        
+        if is_own_repo:
+            print(f"User owns the repository - working directly on: {repo_url}")
+        else:
+            print(f"Fork created/found: {repo_url}")
+
+        # Clone the repository (fork or original)
+        print("Step 4: Cloning repository...")
+        clone_cmd = ["git", "clone", repo_url, staging_dir]
+        result = subprocess.run(clone_cmd, capture_output=True, text=True)
+
+        if result.returncode != 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Failed to clone repository: {result.stderr}"
+            )
+
+        # Load repository info
+        print("Step 5: Loading repository information...")
         repo, origin, origin_url = load_repository(staging_dir)
         files_changed = []
 
+        # Apply refactored code to files
+        print("Step 6: Applying changes...")
         for job in refactored_jobs:
             file_path = job.get("path")
-            print("filepath:", file_path)
-            files_changed.append(file_path)
+
             if os.path.exists(file_path):
-                with open(file_path, "w") as f:
-                    f.write(job.get("new_content"))
+                try:
+                    with open(file_path, "w", encoding="utf-8") as f:
+                        f.write(job.get("new_content"))
+                    files_changed.append(file_path)
+                    print(f"Updated: {file_path}")
+                except Exception as write_error:
+                    print(f"Error writing file {file_path}: {write_error}")
             else:
-                print(f"File {file_path} does not exist")
+                print(f"Warning: File {file_path} does not exist")
 
-        new_branch_name = create_and_push_branch(repo, origin, files_changed)
-        create_pull_request(new_branch_name, request.repository_owner, request.repository_name, "main")
+        if not files_changed:
+            raise HTTPException(
+                status_code=400,
+                detail="No files were successfully updated"
+            )
 
-        return {
+        # Create branch and push changes
+        print("Step 7: Creating branch and pushing changes...")
+        new_branch_name, username = create_and_push_branch(repo, origin, files_changed)
+
+        # Create pull request (different logic for own repo vs fork)
+        if is_own_repo:
+            print("Step 8: Creating pull request in user's own repository...")
+        else:
+            print("Step 8: Creating pull request from fork to original repository...")
+        
+        # Generate comprehensive changelog for PR
+        pr_description = None
+        if file_changes:
+            print(f"Generating AI-explained changelog for {len(file_changes)} files...")
+            pr_description = ChangelogFormatter.generate_pr_description(file_changes)
+            
+            # Also generate full markdown changelog for reference
+            full_changelog = ChangelogFormatter.generate_markdown_changelog(file_changes)
+            print("Changelog generated successfully")
+        
+        pr_url = create_pull_request(
+            new_branch_name,
+            payload.repository_owner,  # Original repo owner
+            payload.repository_name,   # Original repo name
+            "main",                     # Base branch
+            username,                   # User's username
+            is_own_repo,               # Flag to indicate if it's user's own repo
+            pr_description             # Enhanced changelog
+        )
+
+        # Build response with fork information
+        # Calculate statistics
+        total_confidence = sum(job.get("confidence_score", 0) for job in refactored_jobs) / len(refactored_jobs) if refactored_jobs else 0
+        all_valid = all(job.get("validation", {}).get("is_valid", True) for job in refactored_jobs)
+        high_confidence_count = sum(1 for job in refactored_jobs if job.get("confidence_score", 0) >= 80)
+        
+        response_data = {
             "status": "success",
-            "message": "Repository updated and script executed successfully",
-            "repository": request.repository,
-            "output": refactored_jobs,
+            "message": "Repository updated and pull request created successfully",
+            "repository": payload.repository,
+            "files_analyzed": len(job_list),
+            "files_updated": len(files_changed),
+            "branch": new_branch_name,
+            "pull_request_url": pr_url,
+            "is_own_repo": is_own_repo,
+            "quality_metrics": {
+                "average_confidence_score": round(total_confidence, 1),
+                "all_files_validated": all_valid,
+                "high_confidence_files": high_confidence_count,
+                "validation_results": validation_results[:10]  # First 10 for preview
+            },
+            "output": refactored_jobs[:5]  # Return first 5 for preview
         }
+        
+        # Add fork information if it was forked
+        if not is_own_repo:
+            response_data["fork_info"] = {
+                "message": "A temporary staging fork was created to propose these changes",
+                "fork_owner": username,
+                "fork_name": payload.repository_name,
+                "can_delete": True,
+                "delete_note": "You can safely delete this fork after the PR is merged or closed"
+            }
+        
+        return response_data
+
+    except HTTPException:
+        raise
     except ContainerError as ce:
         err_output = ce.stderr.decode("utf-8") if ce.stderr else str(ce)
-        raise HTTPException(status_code=500, detail=f"Container error: {err_output}")
+        raise HTTPException(status_code=500, detail=f"Container execution error: {err_output}")
     except DockerException as de:
         raise HTTPException(status_code=500, detail=f"Docker error: {str(de)}")
+    except subprocess.CalledProcessError as pe:
+        raise HTTPException(status_code=500, detail=f"Git operation failed: {str(pe)}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Unexpected error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+    finally:
+        # Cleanup staging directory
+        if staging_dir and os.path.exists(staging_dir):
+            try:
+                shutil.rmtree(staging_dir)
+                print("Cleaned up staging directory")
+            except Exception as cleanup_error:
+                print(f"Warning: Could not clean up staging directory: {cleanup_error}")
+
 
 @app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket, client_id: Optional[str] = None):
-    await manager.connect(websocket, client_id)
+async def websocket_endpoint(
+    websocket: WebSocket,
+    client_id: Optional[str] = Query(None)
+):
+    """
+    WebSocket endpoint for real-time updates during repository processing.
+
+    Clients can connect to receive live progress updates.
+    """
+    await manager.connect(websocket, client_id or "default")
     try:
         while True:
             data = await websocket.receive_json()
             await manager.broadcast(data)
     except WebSocketDisconnect:
-        manager.disconnect(client_id)
+        await manager.disconnect(client_id or "default")
+        print(f"Client {client_id or 'default'} disconnected")
+    except Exception as e:
+        print(f"WebSocket error: {str(e)}")
+        await manager.disconnect(client_id or "default")
 
-# if __name__ == '__main__':
-#     import uvicorn
-#     uvicorn.run("server:app", host="127.0.0.1", port=5000, reload=True)
+
+@app.on_event("startup")
+async def startup_event():
+    """
+    Run validation checks on startup.
+    """
+    print("=" * 60)
+    print("Starting Dependify API v2.0.0")
+    print("=" * 60)
+
+    # Validate configuration
+    is_valid, missing_vars = Config.validate()
+    if not is_valid:
+        print(f"⚠️  WARNING: Missing environment variables: {', '.join(missing_vars)}")
+        print("Some features may not work correctly.")
+    else:
+        print("✅ Configuration validated successfully")
+
+    print(f"CORS allowed origins: {Config.get_allowed_origins()}")
+    print(f"Rate limit: {Config.RATE_LIMIT_PER_HOUR} requests/hour")
+    print("=" * 60)
+
+
 if __name__ == '__main__':
     import uvicorn
-    # Change host from "127.0.0.1" to "0.0.0.0" for cloud deployment
-    # Also use PORT environment variable if available (Render provides this)
-    port = int(os.environ.get("PORT", 5000))
-    uvicorn.run("server:app", host="0.0.0.0", port=port, reload=False)
 
+    # Use PORT environment variable from Config
+    uvicorn.run(
+        "server:app",
+        host="0.0.0.0",
+        port=Config.PORT,
+        reload=False,
+        log_level="info"
+    )
