@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: Dependify2.0
+    env: python
+    region: oregon
+    plan: free
+    branch: master
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: cd backend && python3 server.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: PORT
+        value: 10000
