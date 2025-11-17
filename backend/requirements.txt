@@ -1,13 +1,19 @@
-fastapi
-docker
-python-dotenv
-modal
-gitpython
-websockets
-supabase
-uvicorn
-groq
-instructor
+fastapi==0.121.2
+uvicorn==0.38.0
+slowapi==0.1.9
+pydantic==2.12.4
+python-dotenv==1.2.1
+pyjwt==2.10.1
+httpx==0.28.1
+requests==2.32.5
+docker==7.1.0
+gitpython==3.1.45
+websockets==15.0.1
+supabase==2.24.0
+modal==1.2.2
+groq==0.34.1
+instructor==1.13.0
+authlib==1.4.0
 # annotated-types==0.7.0
 # anyio==4.8.0
 # certifi==2025.1.31
