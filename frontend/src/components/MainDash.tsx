@@ -13,6 +13,7 @@ import Image from "next/image";
 import { supabase } from '../app/lib/supabaseClient';
 import LiveCodeCard from './LiveCodeCard';
 import MultiFileCodeCard from './MultiFileCodeCard';
+import FeaturesShowcase from './FeaturesShowcase';
 
 
 interface Item {
@@ -242,10 +243,6 @@ export default function MainDash({ sidebarOpen, repositories, tasks }: MainDashP
   ]);
   const [currentUpdate, setCurrentUpdate] = useState<Update>();
 
-  console.log(updates);
-
-
-
   // useEffect(() => {
   //   if (!isLoading) return;
 
@@ -304,7 +301,8 @@ export default function MainDash({ sidebarOpen, repositories, tasks }: MainDashP
   const handleEnterClick = () => {
     setIsLoading(true);
     console.log(inputValue.split('/')[3]);
-    fetch('https://dependify2-0.onrender.com/update', {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001';
+    fetch(`${apiUrl}/update`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -312,10 +310,15 @@ export default function MainDash({ sidebarOpen, repositories, tasks }: MainDashP
       body: JSON.stringify({
         repository: inputValue,
         repository_owner: inputValue.split('/')[3],
-        repository_name: inputValue.split('/')[4].replace('.git', ''),
+        repository_name: inputValue.split('/')[4]?.replace('.git', '') || '',
       }),
     })
-      .then(response => response.json())
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+      })
       .then(data => {
         console.log('Success:', data);
         
@@ -327,6 +330,9 @@ export default function MainDash({ sidebarOpen, repositories, tasks }: MainDashP
       })
       .catch((error) => {
         console.error('Error:', error);
+        setIsLoading(false);
+        // Show error to user
+        alert(`Failed to process repository: ${error.message}`);
       });
   };
 
@@ -374,22 +380,41 @@ export default function MainDash({ sidebarOpen, repositories, tasks }: MainDashP
         <div className="max-w-5xl mx-auto">
           <div className="bg-[rgba(30,30,30,0.8)] backdrop-blur-[50px] rounded-[20px] p-16 mb-8 border border-gray-700/50">
             <MultiFileCodeCard
-              files={updates.filter((update) => update.status === 'WRITING').map((update) => ({
-                old: (() => {
-                  const oldCode = updates.find((u) => u.message.split(' ')[1].replace("...", "") === update.message.split(' ')[1].replace("...", "") && u.status === 'READING');
-                  return {
-                    name: update.message.split(' ')[1].replace("...", ""),
+              files={(updates || []).filter((update) => update?.status === 'WRITING').map((update) => {
+                // Extract filename - handle both old format "Updating file.js..." and new format "✍️ Updating file.js"
+                const extractFilename = (msg: string | null | undefined) => {
+                  if (!msg || typeof msg !== 'string') return 'unknown';
+                  // Try to match the new format with emoji first
+                  const newFormatMatch = msg.match(/(?:📖|✍️)\s*(?:Reading|Updating)\s+(.+?)(?:\s|$)/);
+                  if (newFormatMatch) return newFormatMatch[1];
+                  
+                  // Fall back to old format
+                  const parts = msg.split(' ');
+                  return parts[1]?.replace("...", "") || 'unknown';
+                };
+                
+                const filename = extractFilename(update?.message);
+                
+                // Find the corresponding READING update for this file
+                const oldCode = (updates || []).find((u) => {
+                  const uFilename = extractFilename(u?.message);
+                  return uFilename === filename && u?.status === 'READING';
+                });
+                
+                return {
+                  old: {
+                    name: filename,
                     content: oldCode?.code || "",
-                    description: update.message,
-                  };
-                })(),
-                new: {
-                  name: update.message.split(' ')[1].replace("...", ""),
-                  content: update.code || "",
-                  description: update.message,
-                }
-              }))}
-              link={inputValue.replace(".git", "") + "/pulls"}
+                    description: oldCode?.message || update?.message || "",
+                  },
+                  new: {
+                    name: filename,
+                    content: update?.code || "",
+                    description: update?.message || "",
+                  }
+                };
+              })}
+              link={(inputValue || "").replace(".git", "") + "/pulls"}
             />
           </div>
         </div>
@@ -421,7 +446,16 @@ export default function MainDash({ sidebarOpen, repositories, tasks }: MainDashP
 
               {/* Live Changes */}
               <LiveCodeCard
-                filename={updates[updates.length - 1].message.split(' ')[1].replace("...", "")}
+                filename={(() => {
+                  const msg = updates[updates.length - 1].message;
+                  // Try to match the new format with emoji first
+                  const newFormatMatch = msg.match(/(?:📖|✍️)\s*(?:Reading|Updating)\s+(.+?)(?:\s|$)/);
+                  if (newFormatMatch) return newFormatMatch[1];
+                  
+                  // Fall back to old format
+                  const parts = msg.split(' ');
+                  return parts[1]?.replace("...", "") || 'processing...';
+                })()}
                 language="javascript"
                 finalCode={updates[updates.length - 1].code || ""}
                 typingSpeed={2}
@@ -437,9 +471,10 @@ export default function MainDash({ sidebarOpen, repositories, tasks }: MainDashP
         <div className="top-[-110px] right-[20px] absolute h-[110px] transition-all pt-12 duration-500 hover:pt-8 opacity-75 hover:filter-none overflow-hidden filter">
           <Image
             src="/pou-transparent-cropped.png"
-            width="110"
-            height="600"
+            width={110}
+            height={110}
             alt="Pou is sad."
+            style={{ height: 'auto' }}
           />
         </div>
         <div className="w-full overflow-x-auto">

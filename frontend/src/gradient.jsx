@@ -307,8 +307,8 @@ export function normalizeColor(hexCode) {
             if (0 !== this.last && this.isStatic) return this.minigl.render(), void this.disconnect();
             (/*this.isIntersecting && */this.conf.playing || this.isMouseDown) && requestAnimationFrame(this.animate)
         }), e(this, "addIsLoadedClass", () => {
-            /*this.isIntersecting && */!this.isLoadedClass && (this.isLoadedClass = !0, this.el.classList.add("isLoaded"), setTimeout(() => {
-                this.el.parentElement.classList.add("isLoaded")
+            /*this.isIntersecting && */!this.isLoadedClass && this.el && this.el.classList && (this.isLoadedClass = !0, this.el.classList.add("isLoaded"), setTimeout(() => {
+                this.el && this.el.parentElement && this.el.parentElement.classList && this.el.parentElement.classList.add("isLoaded")
             }, 3e3))
         }), e(this, "pause", () => {
             this.conf.playing = false
