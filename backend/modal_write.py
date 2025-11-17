@@ -11,6 +11,8 @@ image = modal.Image.debian_slim(python_version="3.10") \
     .pip_install("python-dotenv", "groq", "fastapi", "uvicorn", "modal", "instructor", "pydantic", "websockets", "supabase") \
     .add_local_python_source("checker") \
     .add_local_python_source("modal_write") \
+    .add_local_python_source("validators") \
+    .add_local_python_source("changelog_formatter") \
     .add_local_python_source("config") \
     .add_local_python_source("auth") \
     .add_local_python_source("containers") \
