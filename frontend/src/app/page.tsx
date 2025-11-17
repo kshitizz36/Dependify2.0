@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 
 import GradientCanvas from "@/components/GradientCanvas";
@@ -19,10 +20,43 @@ interface Item {
 }
 
 export default function Home() {
+  const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [tasks, setTasks] = useState<Item[]>([]);
   const [currentPage, setCurrentPage] = useState("dashboard");
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  // Check authentication on mount
+  useEffect(() => {
+    const authToken = localStorage.getItem("auth_token");
+    const loginTimestamp = localStorage.getItem("login_timestamp");
+    
+    if (!authToken) {
+      // No auth token, redirect to login
+      router.push("/login");
+      return;
+    }
+    
+    // Check if session has expired (7 days = 604800000 ms)
+    const SESSION_DURATION = 7 * 24 * 60 * 60 * 1000; // 7 days
+    if (loginTimestamp) {
+      const timeElapsed = Date.now() - parseInt(loginTimestamp);
+      
+      if (timeElapsed > SESSION_DURATION) {
+        // Session expired, clear storage and redirect
+        localStorage.removeItem("auth_token");
+        localStorage.removeItem("user");
+        localStorage.removeItem("login_timestamp");
+        router.push("/login");
+        return;
+      }
+    }
+    
+    // User is authenticated, continue loading
+    setIsAuthenticated(true);
+    setLoading(false);
+  }, [router]);
 
   const repositories = [
     exampleRepository,
@@ -178,10 +212,10 @@ export default function Home() {
     }
   };
 
-  if (loading) {
+  if (loading || !isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-white text-xl">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-black">
+        <div className="w-16 h-16 border-4 border-green-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }

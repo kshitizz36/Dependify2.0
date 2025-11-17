@@ -45,9 +45,10 @@ function AuthCallbackContent() {
 
         const data = await response.json();
 
-        // Store token in localStorage
+        // Store token in localStorage with timestamp
         localStorage.setItem("auth_token", data.access_token);
         localStorage.setItem("user", JSON.stringify(data.user));
+        localStorage.setItem("login_timestamp", Date.now().toString());
 
         setStatus("success");
 
