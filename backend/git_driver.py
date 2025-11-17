@@ -274,6 +274,10 @@ Generated with ❤️ by [Dependify 2.0](https://github.com/kshitizz36/Dependify
         "base": base_branch,
         "body": pr_body
     }
+    
+    # Debug: Log what we're sending
+    print(f"DEBUG: PR body length: {len(pr_body) if pr_body else 0} characters")
+    print(f"DEBUG: PR body preview: {pr_body[:200] if pr_body else 'None'}...")
 
     url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls"
 
@@ -285,8 +289,13 @@ Generated with ❤️ by [Dependify 2.0](https://github.com/kshitizz36/Dependify
             print(f"✅ Pull request created: {pr_url}")
             return pr_url
         else:
-            error_msg = response.json().get("message", "Unknown error")
+            error_msg = response.json().get("message", "Unknown error") if response.text else "No response body"
+            error_details = response.json() if response.text else {}
             print(f"❌ Failed to create pull request: {response.status_code} - {error_msg}")
+            print(f"DEBUG: Full error response: {error_details}")
+            print(f"DEBUG: Request URL: {url}")
+            print(f"DEBUG: Request head: {data.get('head')}")
+            print(f"DEBUG: Request base: {data.get('base')}")
             return None
     except requests.RequestException as e:
         print(f"❌ Error creating pull request: {e}")
