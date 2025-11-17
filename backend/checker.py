@@ -5,7 +5,6 @@ from pydantic import BaseModel, ValidationError
 import json
 import instructor
 import supabase
-from config import Config
 
 # Initialize clients lazily to avoid issues with Modal secrets
 _client = None
@@ -16,7 +15,15 @@ def get_client():
     global _client
     if _client is None:
         # Read from environment variable (Modal secrets inject these)
-        api_key = os.getenv("GROQ_API_KEY") or Config.GROQ_API_KEY
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            # Fallback to Config for local development
+            try:
+                from config import Config
+                api_key = Config.GROQ_API_KEY
+            except ImportError:
+                raise ValueError("GROQ_API_KEY not found in environment or config")
+        
         _client = instructor.from_groq(
             Groq(api_key=api_key),
             mode=instructor.Mode.JSON
@@ -27,8 +34,18 @@ def get_supabase_client():
     """Get or create Supabase client."""
     global _supabase_client
     if _supabase_client is None:
-        url = os.getenv("SUPABASE_URL") or Config.SUPABASE_URL
-        key = os.getenv("SUPABASE_KEY") or Config.SUPABASE_KEY
+        url = os.getenv("SUPABASE_URL")
+        key = os.getenv("SUPABASE_KEY")
+        
+        if not url or not key:
+            # Fallback to Config for local development
+            try:
+                from config import Config
+                url = url or Config.SUPABASE_URL
+                key = key or Config.SUPABASE_KEY
+            except ImportError:
+                raise ValueError("SUPABASE credentials not found in environment or config")
+        
         _supabase_client = supabase.create_client(url, key)
     return _supabase_client
 
