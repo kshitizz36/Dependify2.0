@@ -1,20 +1,36 @@
 import os
 import argparse
 from groq import Groq
-from dotenv import load_dotenv
 from pydantic import BaseModel, ValidationError
 import json
 import instructor
 import supabase
+from config import Config
 
+# Initialize clients lazily to avoid issues with Modal secrets
+_client = None
+_supabase_client = None
 
-load_dotenv()  # Loads your GROQ_API_KEY from .env file
+def get_client():
+    """Get or create Groq client with API key."""
+    global _client
+    if _client is None:
+        # Read from environment variable (Modal secrets inject these)
+        api_key = os.getenv("GROQ_API_KEY") or Config.GROQ_API_KEY
+        _client = instructor.from_groq(
+            Groq(api_key=api_key),
+            mode=instructor.Mode.JSON
+        )
+    return _client
 
-client = instructor.from_groq(Groq(api_key="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"), mode=instructor.Mode.JSON)
-
-SUPABASE_URL="https://vpfwosqtxotjkpcgsnas.supabase.co"
-SUPABASE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZwZndvc3F0eG90amtwY2dzbmFzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MjA0MTQ5MCwiZXhwIjoyMDU3NjE3NDkwfQ.eqFTQpKUDKBx4UTnukRjXTpYulANvFQ_t4b56tg4IGg"
-supabase = supabase.create_client(SUPABASE_URL, SUPABASE_KEY)
+def get_supabase_client():
+    """Get or create Supabase client."""
+    global _supabase_client
+    if _supabase_client is None:
+        url = os.getenv("SUPABASE_URL") or Config.SUPABASE_URL
+        key = os.getenv("SUPABASE_KEY") or Config.SUPABASE_KEY
+        _supabase_client = supabase.create_client(url, key)
+    return _supabase_client
 
 
 class CodeChange(BaseModel):
@@ -59,6 +75,7 @@ def analyze_file_with_llm(file_path):
 
 
     try:
+        client = get_client()
         chat_completion = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[
@@ -70,13 +87,25 @@ def analyze_file_with_llm(file_path):
 
         print(chat_completion)
 
+        filename = file_path.split("/")[-1]
         data = {
             "status": "READING",
-            "message": "Reading " + file_path.split("/")[-1] + "...",
+            "message": f"📖 Reading {filename}",
             "code": chat_completion.code_content
         }
 
-        supabase.table("repo-updates").insert(data).execute()
+        try:
+            supabase_client = get_supabase_client()
+            supabase_client.table("repo-updates").insert(data).execute()
+        except Exception as db_error:
+            # If filename column doesn't exist, try without it
+            print(f"Database error (may need to add 'filename' column): {db_error}")
+            data_fallback = {
+                "status": "READING",
+                "message": f"📖 Reading {filename}",
+                "code": chat_completion.code_content
+            }
+            supabase_client.table("repo-updates").insert(data_fallback).execute()
         
         return chat_completion
     except (ValidationError, json.JSONDecodeError) as parse_error:
