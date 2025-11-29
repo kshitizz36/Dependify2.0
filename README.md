@@ -1,4 +1,4 @@
-# Dependify 2.0
+# Dependify
 
 **Code Smarter, Not Harder.**
 
