@@ -1,4 +1,35 @@
-__pycache__
+# Environment variables
 .env
+.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Staging directory
+staging/
+
+# Test files
 modal-test.py
-staging
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

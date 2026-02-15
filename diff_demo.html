@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>GitHub-Style Diff Viewer</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            background: #0d1117;
+            color: #c9d1d9;
+            padding: 40px;
+            min-height: 100vh;
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #58a6ff;
+        }
+        
+        .summary {
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        .summary .additions { color: #3fb950; }
+        .summary .deletions { color: #f85149; }
+        
+        .file-list {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        
+        .file-container {
+            margin-bottom: 16px;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        
+        .file-header {
+            background: #161b22;
+            padding: 12px 16px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s;
+        }
+        .file-header:hover {
+            background: #1f2937;
+        }
+        
+        .file-name {
+            font-weight: 600;
+            font-size: 14px;
+        }
+        .file-icon { margin-right: 8px; }
+        
+        .stats {
+            font-size: 12px;
+            font-family: monospace;
+        }
+        .stats .additions { color: #3fb950; margin-right: 8px; }
+        .stats .deletions { color: #f85149; }
+        
+        .diff-content {
+            display: none;
+            background: #0d1117;
+            border-top: 1px solid #30363d;
+        }
+        .diff-content.open {
+            display: block;
+        }
+        
+        .diff-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            font-size: 12px;
+        }
+        
+        .diff-line {
+            line-height: 20px;
+        }
+        
+        .line-number {
+            width: 50px;
+            padding: 0 10px;
+            text-align: right;
+            color: #484f58;
+            user-select: none;
+            background: #161b22;
+            border-right: 1px solid #30363d;
+        }
+        
+        .line-symbol {
+            width: 20px;
+            text-align: center;
+            font-weight: bold;
+        }
+        
+        .line-content {
+            padding: 0 10px;
+            white-space: pre;
+        }
+        
+        /* Unchanged */
+        .unchanged .line-content { color: #c9d1d9; }
+        
+        /* Removed - Red */
+        .removed {
+            background: rgba(248, 81, 73, 0.15);
+        }
+        .removed .line-number { background: rgba(248, 81, 73, 0.2); }
+        .removed .line-symbol { color: #f85149; }
+        .removed .line-content { color: #ffa198; }
+        
+        /* Added - Green */
+        .added {
+            background: rgba(63, 185, 80, 0.15);
+        }
+        .added .line-number { background: rgba(63, 185, 80, 0.2); }
+        .added .line-symbol { color: #3fb950; }
+        .added .line-content { color: #7ee787; }
+        
+        .click-hint {
+            text-align: center;
+            color: #8b949e;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔄 GitHub-Style Diff Viewer</h1>
+    
+    <div class="summary">
+        Showing <strong>3 changed files</strong> with 
+        <span class="additions">+18 additions</span> and 
+        <span class="deletions">−7 deletions</span>
+    </div>
+    
+    <div class="file-list" id="file-list"></div>
+    
+    <p class="click-hint">👆 Click on a file to expand/collapse the diff</p>
+
+    <script>
+        // This is the data structure backend would send
+        const diffData = {
+            files: [
+                {
+                    filename: "src/utils/helper.py",
+                    status: "modified",
+                    additions: 5,
+                    deletions: 2,
+                    lines: [
+                        { oldNum: 1, newNum: 1, status: ' ', line: 'def calculate_total(items):' },
+                        { oldNum: 2, newNum: 2, status: ' ', line: '    """Calculate the total price of items."""' },
+                        { oldNum: 3, newNum: null, status: '-', line: '    total = 0' },
+                        { oldNum: 4, newNum: null, status: '-', line: '    for item in items:' },
+                        { oldNum: null, newNum: 3, status: '+', line: '    # Using list comprehension for better performance' },
+                        { oldNum: null, newNum: 4, status: '+', line: '    total = sum(item.price for item in items)' },
+                        { oldNum: 5, newNum: 5, status: ' ', line: '    return total' },
+                    ]
+                },
+                {
+                    filename: "src/config.py",
+                    status: "added",
+                    additions: 8,
+                    deletions: 0,
+                    lines: [
+                        { oldNum: null, newNum: 1, status: '+', line: '# Configuration file for Dependify' },
+                        { oldNum: null, newNum: 2, status: '+', line: '' },
+                        { oldNum: null, newNum: 3, status: '+', line: 'API_KEY = "your-api-key-here"' },
+                        { oldNum: null, newNum: 4, status: '+', line: 'DEBUG = True' },
+                        { oldNum: null, newNum: 5, status: '+', line: 'MAX_RETRIES = 3' },
+                        { oldNum: null, newNum: 6, status: '+', line: '' },
+                        { oldNum: null, newNum: 7, status: '+', line: '# Database settings' },
+                        { oldNum: null, newNum: 8, status: '+', line: 'DB_URL = "postgresql://localhost/dependify"' },
+                    ]
+                },
+                {
+                    filename: "src/legacy/old_module.py",
+                    status: "deleted",
+                    additions: 0,
+                    deletions: 5,
+                    lines: [
+                        { oldNum: 1, newNum: null, status: '-', line: '# This module is deprecated' },
+                        { oldNum: 2, newNum: null, status: '-', line: 'def old_function():' },
+                        { oldNum: 3, newNum: null, status: '-', line: '    pass' },
+                        { oldNum: 4, newNum: null, status: '-', line: '' },
+                        { oldNum: 5, newNum: null, status: '-', line: '# TODO: Remove this file' },
+                    ]
+                }
+            ]
+        };
+
+        function getStatusIcon(status) {
+            switch(status) {
+                case 'added': return '🆕';
+                case 'deleted': return '🗑️';
+                default: return '📄';
+            }
+        }
+
+        function renderFileDiff(file, index) {
+            const linesHtml = file.lines.map(l => {
+                const statusClass = l.status === '+' ? 'added' : l.status === '-' ? 'removed' : 'unchanged';
+                const symbol = l.status === ' ' ? '' : l.status;
+                const oldNum = l.oldNum || '';
+                const newNum = l.newNum || '';
+                
+                return `
+                    <tr class="diff-line ${statusClass}">
+                        <td class="line-number">${oldNum}</td>
+                        <td class="line-number">${newNum}</td>
+                        <td class="line-symbol">${symbol}</td>
+                        <td class="line-content">${escapeHtml(l.line)}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            return `
+                <div class="file-container">
+                    <div class="file-header" onclick="toggleFile(${index})">
+                        <span class="file-name">
+                            <span class="file-icon">${getStatusIcon(file.status)}</span>
+                            ${file.filename}
+                        </span>
+                        <span class="stats">
+                            <span class="additions">+${file.additions}</span>
+                            <span class="deletions">−${file.deletions}</span>
+                        </span>
+                    </div>
+                    <div class="diff-content" id="file-${index}">
+                        <table class="diff-table">
+                            <tbody>
+                                ${linesHtml}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function toggleFile(index) {
+            const content = document.getElementById(`file-${index}`);
+            content.classList.toggle('open');
+        }
+
+        // Render all files
+        document.getElementById('file-list').innerHTML = 
+            diffData.files.map((f, i) => renderFileDiff(f, i)).join('');
+        
+        // Open first file by default
+        document.getElementById('file-0').classList.add('open');
+    </script>
+</body>
+</html>
