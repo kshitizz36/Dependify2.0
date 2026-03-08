@@ -31,6 +31,7 @@ from dep_analyzer import run_full_dep_analysis
 from sandbox import app as sandbox_app, run_sandbox_checks
 from scan_feedback import build_learning_context, save_scan_feedback, check_pr_status, get_repo_preferences
 from threat_model import generate_threat_model
+from commit_analyzer import analyze_commit_history
 import uuid
 import tempfile
 
@@ -1221,6 +1222,114 @@ async def submit_run_feedback(request: Request, run_id: str,
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save feedback: {str(e)}")
+
+
+# ============================================================
+# Sprint 6: Fleet Health + Commit Evolution
+# ============================================================
+
+@app.get("/fleet/health", tags=["Fleet"])
+@limiter.limit("10/minute")
+async def get_fleet_health(request: Request, current_user: Dict = Depends(get_current_user)):
+    """Get org-wide health summary across all linked repos."""
+    user_id = str(current_user.get("user_id", ""))
+
+    try:
+        # Get all linked repos
+        repos_result = supabase_client.table("user-repos") \
+            .select("repo_name,repo_owner,repo_url,language") \
+            .eq("user_id", user_id) \
+            .execute()
+
+        repos = repos_result.data or []
+        fleet = []
+        grade_counts = {"A": 0, "B": 0, "C": 0, "D": 0, "F": 0}
+        total_score = 0
+        scanned_count = 0
+
+        for repo in repos:
+            repo_url = repo["repo_url"]
+            html_url = repo_url.replace(".git", "")
+
+            # Get latest score
+            score_result = supabase_client.table("repo-debt-summaries") \
+                .select("overall_debt_score,score_grade,created_at") \
+                .in_("repository_url", [repo_url, html_url]) \
+                .order("created_at", desc=True) \
+                .limit(1) \
+                .execute()
+
+            score = score_result.data[0] if score_result.data else None
+            fleet.append({
+                "repo_name": repo["repo_name"],
+                "repo_owner": repo["repo_owner"],
+                "language": repo.get("language"),
+                "score": score,
+            })
+
+            if score:
+                grade = score.get("score_grade", "A")
+                grade_counts[grade] = grade_counts.get(grade, 0) + 1
+                total_score += score.get("overall_debt_score", 0)
+                scanned_count += 1
+
+        avg_score = total_score / max(scanned_count, 1)
+        if avg_score <= 10: org_grade = "A"
+        elif avg_score <= 25: org_grade = "B"
+        elif avg_score <= 50: org_grade = "C"
+        elif avg_score <= 75: org_grade = "D"
+        else: org_grade = "F"
+
+        return {
+            "total_repos": len(repos),
+            "scanned_repos": scanned_count,
+            "org_grade": org_grade,
+            "avg_debt_score": round(avg_score, 1),
+            "grade_distribution": grade_counts,
+            "repos": sorted(fleet, key=lambda r: (r["score"] or {}).get("overall_debt_score", -1), reverse=True),
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Fleet health failed: {str(e)}")
+
+
+@app.get("/repos/{repo_name}/evolution", tags=["Intelligence"])
+@limiter.limit("10/minute")
+async def get_repo_evolution(request: Request, repo_name: str,
+                             current_user: Dict = Depends(get_current_user)):
+    """Analyze commit history to detect codebase evolution patterns."""
+    user_id = str(current_user.get("user_id", ""))
+
+    try:
+        repo_result = supabase_client.table("user-repos") \
+            .select("repo_url") \
+            .eq("user_id", user_id) \
+            .eq("repo_name", repo_name) \
+            .limit(1) \
+            .execute()
+
+        if not repo_result.data:
+            raise HTTPException(status_code=404, detail="Repository not found")
+
+        repo_url = repo_result.data[0]["repo_url"]
+        html_url = repo_url.replace(".git", "")
+
+        # Clone with depth 50 for history
+        evo_dir = tempfile.mkdtemp(prefix="evolution_")
+        try:
+            subprocess.run(
+                ["git", "clone", "--depth", "50", html_url, evo_dir],
+                check=True, capture_output=True, text=True, timeout=60
+            )
+            evolution = analyze_commit_history(evo_dir, depth=30)
+            return {"repo_name": repo_name, "evolution": evolution}
+        finally:
+            shutil.rmtree(evo_dir, ignore_errors=True)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Evolution analysis failed: {str(e)}")
 
 
 @app.on_event("startup")
