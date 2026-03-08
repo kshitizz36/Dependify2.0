@@ -25,13 +25,12 @@ const ScrollStack: React.FC<ScrollStackProps> = ({ children, className = "" }) =
   const cardsRef = useRef<HTMLElement[]>([]);
   const lastTransformsRef = useRef(new Map<number, any>());
 
-  const ITEM_DISTANCE = 80;
-  const ITEM_SCALE = 0.03;
-  const ITEM_STACK_DISTANCE = 30;
-  const STACK_POSITION = "20%";
+  const ITEM_DISTANCE = 60;
+  const ITEM_SCALE = 0.025;
+  const ITEM_STACK_DISTANCE = 24;
+  const STACK_POSITION = "18%";
   const SCALE_END_POSITION = "10%";
-  const BASE_SCALE = 0.85;
-  const BLUR_AMOUNT = 2;
+  const BASE_SCALE = 0.88;
 
   const calculateProgress = useCallback((scrollTop: number, start: number, end: number) => {
     if (scrollTop < start) return 0;
@@ -57,13 +56,6 @@ const ScrollStack: React.FC<ScrollStackProps> = ({ children, className = "" }) =
     const endElement = scroller.querySelector(".scroll-stack-end") as HTMLElement;
     const endElementTop = endElement ? endElement.offsetTop : 0;
 
-    let topCardIndex = 0;
-    cardsRef.current.forEach((card, i) => {
-      const cardTop = card.offsetTop;
-      const triggerStart = cardTop - stackPositionPx - ITEM_STACK_DISTANCE * i;
-      if (scrollTop >= triggerStart) topCardIndex = i;
-    });
-
     cardsRef.current.forEach((card, i) => {
       if (!card) return;
 
@@ -77,11 +69,6 @@ const ScrollStack: React.FC<ScrollStackProps> = ({ children, className = "" }) =
       const targetScale = BASE_SCALE + i * ITEM_SCALE;
       const scale = 1 - scaleProgress * (1 - targetScale);
 
-      let blur = 0;
-      if (i < topCardIndex) {
-        blur = Math.max(0, (topCardIndex - i) * BLUR_AMOUNT);
-      }
-
       let translateY = 0;
       const isPinned = scrollTop >= pinStart && scrollTop <= pinEnd;
       if (isPinned) {
@@ -93,20 +80,18 @@ const ScrollStack: React.FC<ScrollStackProps> = ({ children, className = "" }) =
       const newTransform = {
         translateY: Math.round(translateY * 100) / 100,
         scale: Math.round(scale * 1000) / 1000,
-        blur: Math.round(blur * 100) / 100,
       };
 
       const lastTransform = lastTransformsRef.current.get(i);
       const hasChanged =
         !lastTransform ||
         Math.abs(lastTransform.translateY - newTransform.translateY) > 0.1 ||
-        Math.abs(lastTransform.scale - newTransform.scale) > 0.001 ||
-        Math.abs(lastTransform.blur - newTransform.blur) > 0.1;
+        Math.abs(lastTransform.scale - newTransform.scale) > 0.001;
 
       if (hasChanged) {
         card.style.transform = `translate3d(0, ${newTransform.translateY}px, 0) scale(${newTransform.scale})`;
-        card.style.filter = newTransform.blur > 0 ? `blur(${newTransform.blur}px)` : "";
-        card.style.opacity = newTransform.blur > 3 ? "0.6" : "1";
+        card.style.filter = "";
+        card.style.opacity = "1";
         lastTransformsRef.current.set(i, newTransform);
       }
     });
