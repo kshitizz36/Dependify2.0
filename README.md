@@ -1,114 +1,71 @@
 # Dependify
 
-**Code Smarter, Not Harder.**
+**AI-powered code health remediation. Scan, fix, verify, ship.**
 
-Dependify is an AI-powered developer tool that automates code maintenance, slashes technical debt, and frees up developers to focus on innovation. Stop wrestling with legacy code and let Dependify bring your projects into the future.
+Dependify autonomously finds security flaws, outdated code, and tech debt in your repositories — then fixes them, verifies the changes compile and pass tests, and opens a PR. No manual triage.
 
-## 🔥 The Problem: Drowning in Technical Debt
+## How it works
 
-The numbers don't lie:
-- **41% of developers** spend most of their time dealing with technical debt
-- Developers dedicate **16.4 hours per week** to maintenance tasks like debugging and refactoring
-- This constant struggle with complex, outdated code is a major contributor to **developer burnout**
+```
+Scan → Fix → Verify → PR
+```
 
-Sound familiar? You're not alone.
+1. **Reader** (Claude Sonnet) — Clones your repo, scans every file for security vulnerabilities, outdated patterns, dependency risks, and maintainability issues. Returns structured findings with evidence chains and confidence scores.
 
-## 💡 The Dependify Solution: AI-Powered Code Revitalization
+2. **Writer** (Claude Haiku) — Takes each finding, rewrites the code. Blast-radius aware — won't break exports used by other files. Processes up to 100 files in parallel.
 
-Dependify leverages the power of Generative AI to automate the tedious and time-consuming aspects of code maintenance. By intelligently scanning your codebase, refactoring code, updating dependencies, and generating clear comments, Dependify transforms your maintenance backlog into a streamlined, automated workflow.
+3. **Verifier** (Haiku + Sonnet) — 3-tier verification loop. Haiku checks the fix, Sonnet diagnoses failures, Haiku corrects. Sandbox runs your build and tests in an isolated container. Ships only when green.
 
-**The result?** Improved code quality, reduced technical debt, and developers who can focus on what they do best: innovate and build great software.
+## What it scans for
 
-## 🏆 Proven Impact: Real Results
+- **Security** — SQL injection, XSS, hardcoded secrets, command injection, insecure crypto
+- **Vulnerabilities** — Dangerous dependency patterns, eval/exec usage, insecure deserialization
+- **Outdated code** — Deprecated APIs, legacy syntax, removed library methods
+- **Maintainability** — High complexity, missing error handling, deep nesting
+- **Dependencies** — Install scripts, URL-based deps, behavioral analysis
 
-Dependify isn't just a concept—it's a tool that delivers tangible results. We successfully improved code quality by auto-updating all major outdated dependencies in **Microsoft's Magma repository**, leading to a **merged pull request (PR #63)**. This achievement demonstrates Dependify's capability to produce production-ready code improvements for significant open-source projects.
+## Key features
 
-## 🚀 How It Works: Your Automated Code Maintenance Workflow
+- **Deterministic scoring** — Debt score (A–F) computed from findings without LLM. Same inputs = same score.
+- **Blast radius analysis** — Import graph builder knows which files depend on which. Writer agent preserves exports for high-dependent files.
+- **Sandbox verification** — Modal container runs build/test/lint before any PR is created. Unsafe = blocked.
+- **Repo intelligence** — Architecture brief, API route detection, complexity hotspots, env var mapping, setup hints. Understand a new codebase in 60 seconds.
+- **Threat modeling** — Entry points, sensitive sinks, data flow analysis with missing protections.
+- **Learning loop** — Tracks which PRs your team merges or rejects. Future scans prioritize what you actually fix.
+- **Fleet health** — Org-wide dashboard across all linked repos with aggregate scoring.
 
-When you connect your GitHub repository to our dashboard, Dependify:
+## Tech stack
 
-### 1. **Intelligent Code Scanning**
-- Uses the **Groq Inference API** within a **Modal container** to thoroughly scan your codebase
-- Identifies outdated dependencies, vulnerabilities, and areas needing refactoring
-- *Value: Proactively identifies risks and improvement opportunities*
+| Layer | Tech |
+|-------|------|
+| Frontend | Next.js 15, Tailwind CSS, Supabase Realtime |
+| Backend | FastAPI (Python) |
+| Compute | Modal serverless containers |
+| LLMs | Claude Sonnet 4 (scan/analyze), Claude Haiku 4.5 (write/verify) |
+| Database | Supabase (PostgreSQL) |
+| Hosting | Vercel (frontend), Modal (agents) |
 
-### 2. **Smart Prioritization**
-- Generates a targeted list of files requiring attention
-- Focuses on high-impact changes first
-- *Value: Maximizes improvement while minimizing disruption*
+## Architecture
 
-### 3. **AI-Powered Enhancement**
-- Parallel processes each file using **Modal containers** with **Groq's LLM**
-- Intelligently refactors code for clarity, efficiency, and performance
-- Adds clear, AI-generated comments for better maintainability
-- *Value: Dramatically improves code quality with minimal manual effort*
+```
+Browser → Next.js (Vercel) → FastAPI Backend → Modal Containers
+                                    ↕
+                              Supabase (DB + Realtime)
+```
 
-### 4. **Seamless Integration**
-- Bundles all improvements into a new GitHub branch
-- Handles staging, committing, and pushing automatically
-- Creates a pull request for your review
-- *Value: Integrates smoothly with your existing development workflow*
+**Modal apps:** `claude-read` (Reader), `claude-write` (Writer), `claude-verify` (Verifier), `dependify-sandbox` (Safety gate)
 
-### 5. **Real-Time Updates**
-- Live notifications through our **Next.js dashboard**
-- All updates managed via **Supabase**
-- *Value: Full visibility into the maintenance process*
+## API
 
-## 🛠️ Tech Stack: Built for Scale
+| Endpoint | What |
+|----------|------|
+| `POST /scan` | Score-only scan — findings + score, no PR |
+| `POST /update` | Full pipeline — scan → fix → verify → sandbox → PR |
+| `GET /repos/{name}/onboard` | Full onboarding: brief + API routes + complexity + env vars |
+| `GET /repos/{name}/threat-model` | Entry points, sinks, data flows |
+| `GET /repos/{name}/evolution` | Commit history analysis, churn hotspots |
+| `GET /fleet/health` | Org-wide repo health dashboard |
 
-We chose cutting-edge technologies to ensure Dependify is robust, fast, and scalable:
+## Status
 
-- **[Modal](https://modal.com/):** Serverless containers for parallel file processing and scalable compute power
-- **[Groq](https://groq.com/):** Lightning-fast AI inference for complex code analysis and refactoring
-- **[Next.js](https://nextjs.org/):** Dynamic, responsive user dashboard with live updates
-- **[Supabase](https://supabase.com/):** Real-time notification system and reliable data storage
-
-## 🎯 What We've Accomplished
-
-- ✅ Successfully leveraged Modal for efficient parallel processing
-- ✅ Automated GitHub pull request creation and workflow integration
-- ✅ Designed a scalable, high-throughput pipeline for AI-powered code maintenance
-- ✅ Delivered production-ready improvements to major open-source projects
-
-## 📚 Key Learnings
-
-- **Modal Mastery:** Optimized container performance for smooth parallel file processing across complex codebases
-- **GitHub Automation:** Developed best practices for seamless automation of GitHub workflows, from branch creation to PR management
-- **AI Integration:** Fine-tuned LLM interactions for consistent, high-quality code improvements
-
-## 🔮 What's Next: The Future of Autonomous Code Care
-
-Dependify is just getting started! Here's what's on the horizon:
-
-### 🧪 **Advanced Testing**
-- **AI-Powered Unit Test Generation:** Automatically generate comprehensive unit tests for refactored code
-- **Test Coverage Analysis:** Identify and fill gaps in your test suite
-
-### 🚢 **Deployment Pipeline**
-- **Direct Deployments:** End-to-end automation from code enhancement to production
-- **Continuous Integration:** Seamless integration with your CI/CD pipeline
-
-### 🛡️ **Security & Reliability**
-- **Proactive Security Audits:** AI-powered vulnerability detection and intelligent patching
-- **Automated Security Updates:** Keep your dependencies secure without manual intervention
-
-### 📝 **Documentation & Standards**
-- **Intelligent Documentation Generation:** Auto-generate comprehensive docstrings and comments
-- **Custom Style Enforcement:** Tailor AI refactoring to your team's coding standards and style guides
-
-## 🎯 Get Started with Dependify
-
-Ready to reclaim your time and supercharge your codebase? While our full dashboard experience is under active development, you can follow our progress right here on GitHub!
-
-**Show Your Support:**
-- ⭐ **Star this repo** to stay updated
-- 👀 **Watch for releases** and new features
-We're building Dependify to revolutionize your development workflow, and we're excited to share it with you soon!
-
----
-*Dependify: Where AI meets code maintenance. Code smarter, not harder.*
-
-## GitAds Sponsored
-[![Sponsored by GitAds](https://gitads.dev/v1/ad-serve?source=kshitizz36/dependify2.0@github)](https://gitads.dev/v1/ad-track?source=kshitizz36/dependify2.0@github)
-
-
+Private beta. [Request access](https://dependify2-0.vercel.app).
