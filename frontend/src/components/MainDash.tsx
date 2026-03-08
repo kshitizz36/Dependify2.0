@@ -676,7 +676,13 @@ export default function MainDash({ sidebarOpen }: MainDashProps) {
       {showScanPanel && scanResult && scanResult.status === 'success' && (
         <div className="relative bg-[rgba(30,30,30,0.8)] backdrop-blur-[50px] rounded-[20px] p-6 mb-8 border border-gray-700/50">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl text-white font-bold">Scan Results</h2>
+            <div>
+              <h2 className="text-xl text-white font-bold">Scan Results</h2>
+              <p className="text-gray-500 text-xs mt-1">
+                Last scanned: {scanResult.run_id ? new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Unknown'}
+                {scanResult.repository && <span className="ml-2 text-gray-600">| {scanResult.repository.split('/').slice(-1)[0]}</span>}
+              </p>
+            </div>
             <button onClick={() => setShowScanPanel(false)} className="text-gray-400 hover:text-white text-xl">&times;</button>
           </div>
 
