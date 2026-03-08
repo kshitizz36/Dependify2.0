@@ -30,6 +30,7 @@ from blast_radius import build_import_graph, get_blast_radius, compute_blast_rad
 from dep_analyzer import run_full_dep_analysis
 from sandbox import app as sandbox_app, run_sandbox_checks
 from scan_feedback import build_learning_context, save_scan_feedback, check_pr_status, get_repo_preferences
+from threat_model import generate_threat_model
 import uuid
 import tempfile
 
@@ -977,6 +978,50 @@ async def get_file_heatmap(request: Request, repo_name: str,
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch heatmap: {str(e)}")
+
+
+# ============================================================
+# Sprint 4: Threat Modeling
+# ============================================================
+
+@app.get("/repos/{repo_name}/threat-model", tags=["Intelligence"])
+@limiter.limit("10/minute")
+async def get_threat_model(request: Request, repo_name: str,
+                           current_user: Dict = Depends(get_current_user)):
+    """Generate a cross-file threat model for a repo."""
+    user_id = str(current_user.get("user_id", ""))
+
+    try:
+        repo_result = supabase_client.table("user-repos") \
+            .select("repo_url") \
+            .eq("user_id", user_id) \
+            .eq("repo_name", repo_name) \
+            .limit(1) \
+            .execute()
+
+        if not repo_result.data:
+            raise HTTPException(status_code=404, detail="Repository not found")
+
+        repo_url = repo_result.data[0]["repo_url"]
+        html_url = repo_url.replace(".git", "")
+
+        # Clone repo for analysis
+        import tempfile as tf
+        threat_dir = tf.mkdtemp(prefix="threat_")
+        try:
+            subprocess.run(
+                ["git", "clone", "--depth", "1", html_url, threat_dir],
+                check=True, capture_output=True, text=True, timeout=60
+            )
+            model = generate_threat_model(threat_dir)
+            return {"repo_name": repo_name, "threat_model": model}
+        finally:
+            shutil.rmtree(threat_dir, ignore_errors=True)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Threat model failed: {str(e)}")
 
 
 # ============================================================
