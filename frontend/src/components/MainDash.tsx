@@ -770,6 +770,37 @@ export default function MainDash({ sidebarOpen }: MainDashProps) {
             </div>
           )}
 
+          {/* Detailed Findings with Evidence */}
+          {scanResult.all_findings && scanResult.all_findings.length > 0 && (
+            <div className="mb-6">
+              <h3 className="text-white font-medium mb-3">Detailed Findings</h3>
+              <div className="space-y-3 max-h-80 overflow-y-auto">
+                {scanResult.all_findings.slice(0, 15).map((f: any, idx: number) => (
+                  <div key={idx} className="bg-gray-800/40 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                        f.severity === 'critical' ? 'bg-red-500/20 text-red-400' :
+                        f.severity === 'high' ? 'bg-orange-500/20 text-orange-400' :
+                        f.severity === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
+                        'bg-blue-500/20 text-blue-400'
+                      }`}>{f.severity?.toUpperCase()}</span>
+                      <span className="text-gray-500 text-xs">{f.category}</span>
+                      {f.confidence && <span className="text-gray-600 text-xs ml-auto">{Math.round(f.confidence * 100)}% confidence</span>}
+                    </div>
+                    <p className="text-gray-300 text-sm">{f.description}</p>
+                    {f.evidence && f.evidence.length > 0 && (
+                      <div className="mt-2 pl-3 border-l-2 border-gray-700">
+                        {f.evidence.slice(0, 3).map((e: string, i: number) => (
+                          <p key={i} className="text-gray-500 text-xs">{e}</p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Blast Radius */}
           {scanResult.blast_radius && scanResult.blast_radius.total_affected_files > 0 && (
             <div className="mb-6 bg-gray-800/40 rounded-xl p-4">

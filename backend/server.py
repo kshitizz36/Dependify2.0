@@ -822,6 +822,7 @@ async def scan_repo(request: Request, payload: ScanRequest,
                 {"file": fs["file_path"], "score": fs["risk_score"], "issues": fs["findings_count"]}
                 for fs in file_scores if fs["findings_count"] > 0
             ],
+            "all_findings": all_findings[:50],  # Detailed findings with evidence (capped at 50)
             "blast_radius": blast_radius_summary,
             "dep_analysis": dep_analysis,
             "brief": brief,
@@ -978,6 +979,78 @@ async def get_file_heatmap(request: Request, repo_name: str,
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch heatmap: {str(e)}")
+
+
+# ============================================================
+# Sprint 5: Smart PR Splitting
+# ============================================================
+
+class SplitUpdateRequest(BaseModel):
+    repository: str = Field(..., description="GitHub repository URL")
+    repository_owner: str = Field(..., description="Repository owner username")
+    repository_name: str = Field(..., description="Repository name")
+    categories: List[str] = Field(default=[], description="Which categories to include. Empty = all")
+
+    @validator('repository')
+    def validate_repository_url(cls, v):
+        if not v.startswith(('https://github.com/', 'git@github.com:')):
+            raise ValueError('Repository must be a valid GitHub URL')
+        return v
+
+
+@app.post('/update/preview', tags=["Update"])
+@limiter.limit(f"{Config.RATE_LIMIT_PER_HOUR}/hour")
+async def preview_update(request: Request, payload: UpdateRequest,
+                         current_user: Optional[Dict] = Depends(get_optional_user)):
+    """
+    Preview what an update would change WITHOUT creating a PR.
+    Returns the scan findings grouped by category for split decision.
+    """
+    try:
+        print(f"Preview: Scanning {payload.repository}...")
+        with container_app.run():
+            job_list = run_script.remote(payload.repository)
+
+        if not job_list:
+            return {"status": "success", "message": "No issues found", "categories": {}}
+
+        # Group findings by category
+        categories: Dict[str, list] = {}
+        for job in job_list:
+            for f in job.get("findings", []):
+                if isinstance(f, dict):
+                    cat = f.get("category", "other")
+                    if cat not in categories:
+                        categories[cat] = []
+                    categories[cat].append({
+                        "file": job.get("path", "").split("/repository/")[-1] if "/repository/" in job.get("path", "") else job.get("path", ""),
+                        "severity": f.get("severity", "low"),
+                        "description": f.get("description", ""),
+                    })
+
+        # Build split recommendation
+        total = sum(len(v) for v in categories.values())
+        recommendation = "single"
+        if total > 10 and len(categories) > 1:
+            recommendation = "split"
+
+        return {
+            "status": "success",
+            "repository": payload.repository,
+            "total_findings": total,
+            "files_to_change": len(job_list),
+            "categories": {
+                cat: {"count": len(findings), "files": list(set(f["file"] for f in findings)), "findings": findings[:5]}
+                for cat, findings in categories.items()
+            },
+            "recommendation": recommendation,
+            "suggested_prs": [
+                {"category": cat, "files": len(set(f["file"] for f in findings)), "findings": len(findings)}
+                for cat, findings in sorted(categories.items(), key=lambda x: -len(x[1]))
+            ],
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Preview failed: {str(e)}")
 
 
 # ============================================================
