@@ -55,7 +55,7 @@ def process_file(job):
         refactored_code_comments: str
 
     # Model configuration
-    WRITER_MODEL = "claude-3-5-haiku-20241022"
+    WRITER_MODEL = "claude-haiku-4-5-20251001"
 
     # Initialize Anthropic client (Writer Agent - Haiku)
     client = Anthropic(api_key=ANTHROPIC_API_KEY)

@@ -8,9 +8,9 @@ app = modal.App(name="claude-verify", image=image)
 
 # Configuration
 MAX_RETRIES = 2
-VERIFIER_MODEL = "claude-3-5-haiku-20241022"   # Haiku verifies (fast/cheap)
+VERIFIER_MODEL = "claude-haiku-4-5-20251001"    # Haiku verifies (fast/cheap)
 ANALYZER_MODEL = "claude-sonnet-4-20250514"     # Sonnet analyzes failures (smart)
-FIXER_MODEL = "claude-3-5-haiku-20241022"       # Haiku fixes based on Sonnet's analysis
+FIXER_MODEL = "claude-haiku-4-5-20251001"       # Haiku fixes based on Sonnet's analysis
 
 
 @app.function(
