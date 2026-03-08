@@ -244,11 +244,15 @@ async def get_linked_repos(request: Request, current_user: Dict = Depends(get_cu
         repos = result.data or []
 
         # Fetch latest debt scores for each repo
+        # Scan saves with HTML URL, linked repos store clone URL — try both
         for repo in repos:
             try:
+                repo_url = repo["repo_url"]
+                # Also try HTML URL (without .git)
+                html_url = repo_url.replace(".git", "")
                 score_result = supabase_client.table("repo-debt-summaries") \
                     .select("overall_debt_score,score_grade,created_at") \
-                    .eq("repository_url", repo["repo_url"]) \
+                    .in_("repository_url", [repo_url, html_url]) \
                     .order("created_at", desc=True) \
                     .limit(1) \
                     .execute()
