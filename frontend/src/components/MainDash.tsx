@@ -218,8 +218,10 @@ export default function MainDash({ sidebarOpen }: MainDashProps) {
 
   // Scan state
   const [scanResult, setScanResult] = useState<any>(null);
+  const [scanResultsCache, setScanResultsCache] = useState<Record<string, any>>({});
   const [isScanning, setIsScanning] = useState(false);
   const [scanningRepo, setScanningRepo] = useState<string | null>(null);
+  const [showScanPanel, setShowScanPanel] = useState(false);
 
   // Score-only scan (no PR)
   const handleRepoScan = async (repo: LinkedRepo) => {
@@ -227,6 +229,7 @@ export default function MainDash({ sidebarOpen }: MainDashProps) {
     setIsScanning(true);
     setScanningRepo(repo.repo_name);
     setScanResult(null);
+    setShowScanPanel(true);
     try {
       const htmlUrl = `https://github.com/${repo.repo_owner}/${repo.repo_name}`;
       const resp = await fetch(`${apiUrl}/scan`, {
@@ -244,6 +247,10 @@ export default function MainDash({ sidebarOpen }: MainDashProps) {
       });
       const data = await resp.json();
       setScanResult(data);
+      // Cache results by repo name so clicking score reopens them
+      if (data.status === 'success') {
+        setScanResultsCache(prev => ({ ...prev, [repo.repo_name]: data }));
+      }
       // Refresh linked repos to show updated score
       if (token) fetchLinkedRepos(token);
     } catch (e) {
@@ -251,6 +258,18 @@ export default function MainDash({ sidebarOpen }: MainDashProps) {
     } finally {
       setIsScanning(false);
       setScanningRepo(null);
+    }
+  };
+
+  // Open cached scan results when clicking on a score
+  const handleScoreClick = (repo: LinkedRepo) => {
+    const cached = scanResultsCache[repo.repo_name];
+    if (cached) {
+      setScanResult(cached);
+      setShowScanPanel(true);
+    } else {
+      // No cached results, trigger a new scan
+      handleRepoScan(repo);
     }
   };
 
@@ -581,12 +600,17 @@ export default function MainDash({ sidebarOpen }: MainDashProps) {
                     </td>
                     <td className="px-4 py-4">
                       {repo.last_score ? (
-                        <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleScoreClick(repo)}
+                          className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
+                          title="Click to view scan details"
+                        >
                           <span className={`text-lg font-bold ${getScoreColor(repo.last_score.score_grade)}`}>
                             {repo.last_score.score_grade}
                           </span>
                           <span className="text-gray-400 text-sm">{repo.last_score.overall_debt_score}/100</span>
-                        </div>
+                          <span className="text-gray-600 text-xs">&#9654;</span>
+                        </button>
                       ) : (
                         <span className="text-gray-500 text-sm">Not scanned</span>
                       )}
@@ -626,12 +650,23 @@ export default function MainDash({ sidebarOpen }: MainDashProps) {
         </div>
       </div>
 
+      {/* Scanning Indicator */}
+      {isScanning && showScanPanel && !scanResult && (
+        <div className="relative bg-[rgba(30,30,30,0.8)] backdrop-blur-[50px] rounded-[20px] p-6 mb-8 border border-gray-700/50">
+          <div className="flex flex-col items-center justify-center py-12 space-y-4">
+            <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            <p className="text-white font-medium">Scanning {scanningRepo}...</p>
+            <p className="text-gray-400 text-sm">Analyzing files for security, vulnerabilities, and code health</p>
+          </div>
+        </div>
+      )}
+
       {/* Scan Results Panel */}
-      {scanResult && scanResult.status === 'success' && (
+      {showScanPanel && scanResult && scanResult.status === 'success' && (
         <div className="relative bg-[rgba(30,30,30,0.8)] backdrop-blur-[50px] rounded-[20px] p-6 mb-8 border border-gray-700/50">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl text-white font-bold">Scan Results</h2>
-            <button onClick={() => setScanResult(null)} className="text-gray-400 hover:text-white">&times;</button>
+            <button onClick={() => setShowScanPanel(false)} className="text-gray-400 hover:text-white text-xl">&times;</button>
           </div>
 
           {/* Score Card */}
