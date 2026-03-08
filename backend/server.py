@@ -25,7 +25,7 @@ from modal_write import app as write_app, process_file
 from modal_verify import app as verify_app, verify_and_fix
 from git_driver import load_repository, create_and_push_branch, create_pull_request, create_fork
 from checker import compute_repo_score, Finding, get_all_files_recursively
-from repo_intel import generate_repo_brief
+from repo_intel import generate_repo_brief, generate_full_onboarding
 from blast_radius import build_import_graph, get_blast_radius, compute_blast_radius_for_changes
 from dep_analyzer import run_full_dep_analysis
 from sandbox import app as sandbox_app, run_sandbox_checks
@@ -1222,6 +1222,62 @@ async def submit_run_feedback(request: Request, run_id: str,
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save feedback: {str(e)}")
+
+
+# ============================================================
+# Sprint 8: Enhanced Onboarding
+# ============================================================
+
+@app.get("/repos/{repo_name}/onboard", tags=["Intelligence"])
+@limiter.limit("5/minute")
+async def get_full_onboarding(request: Request, repo_name: str,
+                              current_user: Dict = Depends(get_current_user)):
+    """
+    Generate the complete enhanced onboarding package for a repo.
+    Includes: brief, API routes, complexity analysis, env vars, setup hints.
+    """
+    user_id = str(current_user.get("user_id", ""))
+
+    try:
+        repo_result = supabase_client.table("user-repos") \
+            .select("repo_url") \
+            .eq("user_id", user_id) \
+            .eq("repo_name", repo_name) \
+            .limit(1) \
+            .execute()
+
+        if not repo_result.data:
+            raise HTTPException(status_code=404, detail="Repository not found")
+
+        repo_url = repo_result.data[0]["repo_url"]
+        html_url = repo_url.replace(".git", "")
+
+        onboard_dir = tempfile.mkdtemp(prefix="onboard_")
+        try:
+            subprocess.run(
+                ["git", "clone", "--depth", "1", html_url, onboard_dir],
+                check=True, capture_output=True, text=True, timeout=60
+            )
+            result = generate_full_onboarding(onboard_dir)
+
+            # Save brief to Supabase
+            try:
+                supabase_client.table("repo-briefs").insert({
+                    "repo_url": html_url,
+                    "user_id": user_id,
+                    "brief_json": json.dumps(result["brief"]),
+                }).execute()
+            except Exception:
+                pass
+
+            return {"repo_name": repo_name, "onboarding": result}
+        finally:
+            shutil.rmtree(onboard_dir, ignore_errors=True)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Onboarding failed: {str(e)}")
 
 
 # ============================================================
