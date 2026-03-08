@@ -247,12 +247,23 @@ export default function MainDash({ sidebarOpen }: MainDashProps) {
       });
       const data = await resp.json();
       setScanResult(data);
-      // Cache results by repo name so clicking score reopens them
       if (data.status === 'success') {
+        // Cache results by repo name so clicking score reopens them
         setScanResultsCache(prev => ({ ...prev, [repo.repo_name]: data }));
+        // Immediately update the score in the linked repos table (no re-fetch needed)
+        setLinkedRepos(prev => prev.map(r =>
+          r.repo_name === repo.repo_name
+            ? {
+                ...r,
+                last_score: {
+                  overall_debt_score: data.score?.overall_debt_score ?? 0,
+                  score_grade: data.score?.score_grade ?? 'A',
+                  created_at: new Date().toISOString(),
+                }
+              }
+            : r
+        ));
       }
-      // Refresh linked repos to show updated score
-      if (token) fetchLinkedRepos(token);
     } catch (e) {
       console.error('Scan error:', e);
     } finally {
