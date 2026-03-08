@@ -678,10 +678,15 @@ export default function MainDash({ sidebarOpen }: MainDashProps) {
           <div className="flex justify-between items-center mb-6">
             <div>
               <h2 className="text-xl text-white font-bold">Scan Results</h2>
-              <p className="text-gray-500 text-xs mt-1">
-                Last scanned: {scanResult.run_id ? new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Unknown'}
-                {scanResult.repository && <span className="ml-2 text-gray-600">| {scanResult.repository.split('/').slice(-1)[0]}</span>}
-              </p>
+              <div className="flex items-center gap-2 mt-1">
+                <p className="text-gray-500 text-xs">
+                  Last scanned: {scanResult.run_id ? new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Unknown'}
+                  {scanResult.repository && <span className="ml-2 text-gray-600">| {scanResult.repository.split('/').slice(-1)[0]}</span>}
+                </p>
+                {scanResult.learning_context && (
+                  <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded text-xs">Tuned scan</span>
+                )}
+              </div>
             </div>
             <button onClick={() => setShowScanPanel(false)} className="text-gray-400 hover:text-white text-xl">&times;</button>
           </div>

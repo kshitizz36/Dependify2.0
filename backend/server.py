@@ -29,6 +29,7 @@ from repo_intel import generate_repo_brief
 from blast_radius import build_import_graph, get_blast_radius, compute_blast_radius_for_changes
 from dep_analyzer import run_full_dep_analysis
 from sandbox import app as sandbox_app, run_sandbox_checks
+from scan_feedback import build_learning_context, save_scan_feedback, check_pr_status, get_repo_preferences
 import uuid
 import tempfile
 
@@ -664,6 +665,11 @@ async def scan_repo(request: Request, payload: ScanRequest,
     try:
         print(f"[Scan {run_id}] Scanning repository: {payload.repository}")
 
+        # Check learning history for this repo
+        learning_context = build_learning_context(payload.repository)
+        if learning_context:
+            print(f"[Scan {run_id}] Learning context: {learning_context[:100]}...")
+
         # Step 1: Run Reader Agent via Modal
         print(f"[Scan {run_id}] Step 1: Analyzing files with Reader Agent...")
         with container_app.run():
@@ -818,6 +824,7 @@ async def scan_repo(request: Request, payload: ScanRequest,
             "blast_radius": blast_radius_summary,
             "dep_analysis": dep_analysis,
             "brief": brief,
+            "learning_context": learning_context if learning_context else None,
         }
 
     except HTTPException:
@@ -970,6 +977,132 @@ async def get_file_heatmap(request: Request, repo_name: str,
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch heatmap: {str(e)}")
+
+
+# ============================================================
+# Sprint 3: Evidence, Learning Loop, Run Details
+# ============================================================
+
+@app.get("/runs/{run_id}", tags=["Runs"])
+@limiter.limit("30/minute")
+async def get_run_details(request: Request, run_id: str,
+                          current_user: Dict = Depends(get_current_user)):
+    """Get full evidence and details for a specific scan/update run."""
+    try:
+        # Get score summary
+        score = supabase_client.table("repo-debt-summaries") \
+            .select("*") \
+            .eq("run_id", run_id) \
+            .limit(1) \
+            .execute()
+
+        # Get file-level scores
+        files = supabase_client.table("file-scores") \
+            .select("*") \
+            .eq("run_id", run_id) \
+            .order("risk_score", desc=True) \
+            .execute()
+
+        if not score.data:
+            raise HTTPException(status_code=404, detail="Run not found")
+
+        return {
+            "run_id": run_id,
+            "score": score.data[0] if score.data else None,
+            "files": files.data or [],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch run: {str(e)}")
+
+
+@app.get("/repos/{repo_name}/feedback", tags=["Learning"])
+@limiter.limit("30/minute")
+async def get_repo_feedback(request: Request, repo_name: str,
+                            current_user: Dict = Depends(get_current_user)):
+    """Get learning loop preferences for a repo."""
+    user_id = str(current_user.get("user_id", ""))
+
+    try:
+        repo_result = supabase_client.table("user-repos") \
+            .select("repo_url") \
+            .eq("user_id", user_id) \
+            .eq("repo_name", repo_name) \
+            .limit(1) \
+            .execute()
+
+        if not repo_result.data:
+            raise HTTPException(status_code=404, detail="Repository not found")
+
+        repo_url = repo_result.data[0]["repo_url"]
+        html_url = repo_url.replace(".git", "")
+
+        prefs = get_repo_preferences(html_url)
+        return {"repo_name": repo_name, "preferences": prefs}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch feedback: {str(e)}")
+
+
+@app.post("/runs/{run_id}/feedback", tags=["Learning"])
+@limiter.limit("20/minute")
+async def submit_run_feedback(request: Request, run_id: str,
+                              current_user: Dict = Depends(get_current_user)):
+    """
+    Check PR status and record feedback for learning loop.
+    Called after user merges/rejects a Dependify PR.
+    """
+    github_token = current_user.get("github_token")
+    if not github_token:
+        raise HTTPException(status_code=401, detail="GitHub token required")
+
+    try:
+        # Get the run's score data to find the PR
+        score = supabase_client.table("repo-debt-summaries") \
+            .select("repository_url") \
+            .eq("run_id", run_id) \
+            .limit(1) \
+            .execute()
+
+        if not score.data:
+            raise HTTPException(status_code=404, detail="Run not found")
+
+        repo_url = score.data[0]["repository_url"]
+
+        # Get file scores for this run
+        files = supabase_client.table("file-scores") \
+            .select("file_path,category_breakdown") \
+            .eq("run_id", run_id) \
+            .execute()
+
+        # For now, record all files as the same action
+        # TODO: In future, check individual file status from PR diff
+        body = await request.json()
+        action = body.get("action", "unknown")  # merged, rejected, ignored
+
+        for f in (files.data or []):
+            categories = f.get("category_breakdown", {})
+            if isinstance(categories, str):
+                categories = json.loads(categories)
+            primary_cat = max(categories, key=categories.get) if categories else "unknown"
+
+            save_scan_feedback(
+                run_id=run_id,
+                repo_url=repo_url,
+                file_path=f["file_path"],
+                change_category=primary_cat,
+                user_action=action,
+            )
+
+        return {"status": "success", "files_recorded": len(files.data or [])}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save feedback: {str(e)}")
 
 
 @app.on_event("startup")
