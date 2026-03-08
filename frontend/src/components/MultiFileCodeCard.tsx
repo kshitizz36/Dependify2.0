@@ -32,7 +32,20 @@ interface MultiFileCodeCardProps {
 }
 
 export default function MultiFileCodeCard({ files, link }: MultiFileCodeCardProps) {
-  const [activeFile, setActiveFile] = useState(files[0].old.name);
+  const [activeFile, setActiveFile] = useState(files[0]?.old?.name || "");
+
+  // Early return if files is empty or invalid
+  if (!files || files.length === 0) {
+    return (
+      <Card className="w-full max-w-4xl bg-zinc-800 text-gray-100 border-none">
+        <CardHeader>
+          <CardTitle className="text-lg font-semibold text-gray-100">
+            No files to display
+          </CardTitle>
+        </CardHeader>
+      </Card>
+    );
+  }
 
   const totalLines = useMemo(() => {
     return files.reduce(
