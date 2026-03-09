@@ -34,18 +34,9 @@ export default function Home() {
   // Show nothing while checking auth
   if (isChecking) return null;
 
-  // Show landing page for non-authenticated users
+  // Show landing page for non-authenticated users (owns its own bg)
   if (!isAuthenticated) {
-    return (
-      <>
-        <GradientCanvas
-          gradientColor1={theme.gradientColor1}
-          gradientColor2={theme.gradientColor2}
-          gradientColor3={theme.gradientColor3}
-        />
-        <LandingPage />
-      </>
-    );
+    return <LandingPage />;
   }
 
   // Dashboard for authenticated users

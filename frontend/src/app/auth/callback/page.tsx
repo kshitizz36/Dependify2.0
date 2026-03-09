@@ -9,7 +9,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001";
 function AuthCallbackInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
+  const [status, setStatus] = useState<"loading" | "success" | "error" | "waitlisted">("loading");
   const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
@@ -45,6 +45,13 @@ function AuthCallbackInner() {
         }
 
         const data = await response.json();
+
+        // Check if user is on waitlist
+        if (data.waitlisted) {
+          setStatus("waitlisted");
+          setTimeout(() => router.push("/"), 4000);
+          return;
+        }
 
         localStorage.setItem("auth_token", data.access_token);
         localStorage.setItem("user", JSON.stringify(data.user));
@@ -119,6 +126,36 @@ function AuthCallbackInner() {
                 </h2>
                 <p className="text-gray-400">
                   Redirecting to your dashboard...
+                </p>
+              </div>
+            </div>
+          )}
+
+          {status === "waitlisted" && (
+            <div className="space-y-6">
+              <div className="flex justify-center">
+                <div className="w-16 h-16 rounded-full bg-yellow-500/20 flex items-center justify-center">
+                  <svg
+                    className="w-8 h-8 text-yellow-400"
+                    fill="none"
+                    strokeWidth="2"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                </div>
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-white mb-2">
+                  You're on the waitlist
+                </h2>
+                <p className="text-gray-400">
+                  We'll email you when your spot opens. Redirecting...
                 </p>
               </div>
             </div>

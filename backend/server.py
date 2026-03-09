@@ -85,6 +85,10 @@ class AuthResponse(BaseModel):
     user: Dict
 
 
+class EarlyAccessRequest(BaseModel):
+    email: str = Field(..., description="Email for early access waitlist")
+
+
 class LinkReposRequest(BaseModel):
     repos: List[Dict] = Field(..., description="List of repos to link, each with repo_url, repo_name, repo_owner, language")
 
@@ -100,8 +104,41 @@ async def health_check():
     }
 
 
+# Early Access endpoints
+@app.post("/early-access", tags=["Early Access"])
+@limiter.limit("5/minute")
+async def request_early_access(request: Request, body: EarlyAccessRequest):
+    """Submit email for early access waitlist."""
+    import re
+    email = body.email.strip().lower()
+    if not re.match(r'^[^@]+@[^@]+\.[^@]+$', email):
+        raise HTTPException(status_code=400, detail="Invalid email address")
+    try:
+        supabase_client.table("early_access").upsert(
+            {"email": email, "status": "waitlisted"},
+            on_conflict="email"
+        ).execute()
+        return {"status": "ok", "message": "You're on the list"}
+    except Exception:
+        return {"status": "ok", "message": "You're already registered"}
+
+
+@app.get("/early-access/check", tags=["Early Access"])
+@limiter.limit("10/minute")
+async def check_early_access(request: Request, email: str):
+    """Check if an email has been approved for access."""
+    email = email.strip().lower()
+    result = supabase_client.table("early_access") \
+        .select("status") \
+        .eq("email", email) \
+        .execute()
+    if not result.data:
+        return {"approved": False, "status": "not_found"}
+    return {"approved": result.data[0]["status"] == "approved", "status": result.data[0]["status"]}
+
+
 # GitHub OAuth endpoints
-@app.post("/auth/github", response_model=AuthResponse, tags=["Authentication"])
+@app.post("/auth/github", tags=["Authentication"])
 @limiter.limit("10/minute")
 async def github_oauth(request: Request, oauth_request: GitHubOAuthRequest):
     """
@@ -112,9 +149,31 @@ async def github_oauth(request: Request, oauth_request: GitHubOAuthRequest):
     """
     try:
         github_data = await AuthService.exchange_github_code(oauth_request.code)
-
-        # Create JWT token for our API
         user_data = github_data["user"]
+
+        # Check early access approval
+        user_email = user_data.get("email")
+        auto_approve = os.getenv("AUTO_APPROVE_EARLY_ACCESS", "false").lower() == "true"
+
+        if user_email and not auto_approve:
+            access_check = supabase_client.table("early_access") \
+                .select("status") \
+                .eq("email", user_email.lower()) \
+                .execute()
+            if not access_check.data or access_check.data[0]["status"] != "approved":
+                return {
+                    "access_token": "",
+                    "token_type": "bearer",
+                    "user": user_data,
+                    "waitlisted": True
+                }
+            # Link GitHub username to early_access record
+            supabase_client.table("early_access") \
+                .update({"github_username": user_data["login"]}) \
+                .eq("email", user_email.lower()) \
+                .execute()
+
+        # Create JWT token
         access_token = AuthService.create_access_token(
             data={
                 "user_id": user_data["id"],

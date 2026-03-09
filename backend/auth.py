@@ -119,13 +119,29 @@ class AuthService:
 
             user_data = user_response.json()
 
+            # If email is private, fetch from /user/emails
+            email = user_data.get("email")
+            if not email:
+                emails_response = await client.get(
+                    "https://api.github.com/user/emails",
+                    headers={
+                        "Authorization": f"Bearer {access_token}",
+                        "Accept": "application/json",
+                    },
+                )
+                if emails_response.status_code == 200:
+                    emails = emails_response.json()
+                    primary = next((e for e in emails if e.get("primary")), None)
+                    if primary:
+                        email = primary["email"]
+
             return {
                 "github_token": access_token,
                 "user": {
                     "id": user_data.get("id"),
                     "login": user_data.get("login"),
                     "name": user_data.get("name"),
-                    "email": user_data.get("email"),
+                    "email": email,
                     "avatar_url": user_data.get("avatar_url"),
                 },
             }
