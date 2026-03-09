@@ -112,7 +112,7 @@ export default function MainDash({ sidebarOpen }: MainDashProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [repoSearch, setRepoSearch] = useState('');
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001';
 
   // Get auth token from localStorage
   // Auth callback stores as 'auth_token', check both for compatibility
