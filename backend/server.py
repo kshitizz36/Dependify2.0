@@ -137,6 +137,51 @@ async def check_early_access(request: Request, email: str):
     return {"approved": result.data[0]["status"] == "approved", "status": result.data[0]["status"]}
 
 
+@app.get("/admin/early-access", tags=["Admin"])
+async def list_early_access(request: Request, status: str = None, current_user: Dict = Depends(get_current_user)):
+    """List all early access requests. Admin only (checks ADMIN_USERS env var)."""
+    admin_users = os.getenv("ADMIN_USERS", "").split(",")
+    if current_user.get("username") not in admin_users:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    query = supabase_client.table("early_access").select("*").order("created_at", desc=True)
+    if status:
+        query = query.eq("status", status)
+    result = query.execute()
+    return {"users": result.data, "total": len(result.data)}
+
+
+@app.post("/admin/early-access/{email}/approve", tags=["Admin"])
+async def approve_early_access(request: Request, email: str, current_user: Dict = Depends(get_current_user)):
+    """Approve a user for early access. Admin only."""
+    admin_users = os.getenv("ADMIN_USERS", "").split(",")
+    if current_user.get("username") not in admin_users:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    email = email.strip().lower()
+    result = supabase_client.table("early_access") \
+        .update({"status": "approved", "approved_at": "now()"}) \
+        .eq("email", email) \
+        .execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Email not found")
+    return {"status": "ok", "email": email, "approved": True}
+
+
+@app.post("/admin/early-access/{email}/reject", tags=["Admin"])
+async def reject_early_access(request: Request, email: str, current_user: Dict = Depends(get_current_user)):
+    """Reject a user from early access. Admin only."""
+    admin_users = os.getenv("ADMIN_USERS", "").split(",")
+    if current_user.get("username") not in admin_users:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    email = email.strip().lower()
+    result = supabase_client.table("early_access") \
+        .update({"status": "rejected"}) \
+        .eq("email", email) \
+        .execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Email not found")
+    return {"status": "ok", "email": email, "rejected": True}
+
+
 # GitHub OAuth endpoints
 @app.post("/auth/github", tags=["Authentication"])
 @limiter.limit("10/minute")
